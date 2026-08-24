@@ -1,5 +1,7 @@
 # dsh-reasoning-slider
 
+> **来源与许可**：本项目为 DeepSeek Harness 插件原创开发（MIT）；滑块动画效果参考 [flyemFSB/dsh-reasoning-effort-hdbzq](https://github.com/flyemFSB/dsh-reasoning-effort-hdbzq)（MIT）。详见仓库根目录 [README.md](../README.md) 的来源与许可总表。
+
 DeepSeek Harness 插件：**5 档思考强度**。两个半区各解决一半问题：
 
 - **host 半区**（`index.js`）：自动给 `llm-pi-ai` 下所有**未声明** `reasoningEfforts` 的自定义网关模型注入默认 5 档（off/low/medium/high/max）；同时给所有**未显式声明** `compat.supportsDeveloperRole` 的模型补 `false`，让系统提示走最通用的 `system` role（部分严格中转网关对 OpenAI 推理模型的 `developer` role 写法返回 400，`system` 则几乎所有网关可接受）。以后在官方「模型」页新加的任何模型，`settings/updated` 一触发就自动带上思考强度与 system-role 兼容，无需手动配置。
