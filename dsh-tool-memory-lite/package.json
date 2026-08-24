@@ -1,0 +1,11 @@
+{
+  "name": "dsh-tool-memory-lite",
+  "version": "0.1.0",
+  "description": "极简会话记忆插件：显式触发，按日期存档会话总结（dsh-home/memory/YYYY-MM-DD.md）",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "license": "MIT"
+}

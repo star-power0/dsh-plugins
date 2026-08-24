@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "repositories": {
+    "ccch1mneyyy/dsh-cc-tui": {
+      "source": "npm",
+      "spec": "dsh-cc-tui@0.2.0",
+      "profiles": ["cc-tui"],
+      "manualSteps": true
+    }
+  }
+}

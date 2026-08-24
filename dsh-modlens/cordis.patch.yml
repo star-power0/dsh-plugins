@@ -1,0 +1,7 @@
+# dsh-modlens unified bundle patch: one insert mounting the engine + guard
+# composite. Local profiles register it via their own cordis.patch.yml
+# instead (link dependency + manual insert); this patch only applies when the
+# package is ever loaded as a bundle.
+- insert:
+    - id: dsh-modlens
+      name: 'dsh-modlens'

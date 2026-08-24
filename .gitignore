@@ -1,0 +1,12 @@
+# 依赖与构建缓存（pnpm install 可重建）
+node_modules/
+*.tsbuildinfo
+
+# 本地临时/交接文件
+.tmp/
+**/.tmp/
+memory.md
+
+# 系统文件
+.DS_Store
+Thumbs.db

@@ -1,0 +1,462 @@
+/* dsh-reasoning-slider —— 5 档思考强度滑块样式（沿用 flyemFSB 动画实现，
+   只使用语义 token，跟随亮/暗主题） */
+
+.root {
+  position: relative;
+  min-width: 0;
+}
+
+/* 触发器胶囊 */
+.trigger {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 240px;
+  height: 28px;
+  padding: 0 4px 0 8px;
+  border: none;
+  border-radius: 24px;
+  outline: none;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.trigger:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.trigger:focus-visible {
+  box-shadow: 0 0 0 2px var(--dsw-alias-border-l3);
+}
+
+.trigger:disabled {
+  color: var(--dsw-alias-label-dimmed);
+  cursor: default;
+}
+
+.triggerAvatar {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: 50%;
+  object-fit: cover;
+  -webkit-user-drag: none;
+}
+
+.triggerLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.triggerEffort {
+  flex: 0 0 auto;
+  color: var(--dsw-alias-label-caption);
+}
+
+.chevron {
+  flex: 0 0 auto;
+  color: var(--dsw-alias-label-caption);
+  transition: transform 120ms ease;
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+}
+
+/* 弹出面板与内置菜单同材质 */
+.panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  width: min(320px, calc(100vw - 32px));
+  max-height: min(480px, calc(100vh - 96px));
+  overflow: hidden;
+  padding: 6px;
+  border: 1px solid var(--dsw-alias-border-inverted);
+  border-radius: 12px;
+  background: var(--dsw-specific-menu);
+  box-shadow: var(--dsw-shadow-lv3);
+  color: var(--dsw-alias-label-primary);
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+}
+
+.sectionTitle {
+  padding: 6px 8px 4px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+}
+
+.modelList {
+  min-height: 0;
+  max-height: 210px;
+  overflow-y: auto;
+}
+
+.modelRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 10px;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.modelRow:hover:not(:disabled),
+.modelRow:focus-visible {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.modelRow:disabled {
+  color: var(--dsw-alias-label-dimmed);
+  cursor: default;
+}
+
+.modelCopy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.modelName {
+  overflow: hidden;
+  color: inherit;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modelGroup {
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.check {
+  display: grid;
+  place-items: center;
+  flex: 0 0 18px;
+  color: var(--dsw-alias-label-primary);
+}
+
+/* 档位滑块：装饰轨道层 + 自绘 thumb + 透明原生 range */
+.effortBar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 10px 10px;
+  margin-top: 2px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.trackWrap {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 44px;
+  /* 与组件内 TRACK_PAD=22 同步 */
+  padding: 0 22px;
+}
+
+.trackWrap:hover .track {
+  box-shadow: var(--dsw-shadow-lv2);
+}
+
+.trackWrap:hover .knob:not(.knobDragging) {
+  box-shadow:
+    0 0 0 4px var(--dsw-alias-interactive-bg-hover-accent),
+    0 0 18px var(--dsw-alias-state-business-primary),
+    var(--dsw-shadow-lv3);
+}
+
+.track {
+  position: relative;
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  box-shadow: var(--dsw-shadow-lv1);
+}
+
+.trackFill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--dsw-alias-interactive-bg-hover-accent), var(--dsw-alias-state-business-primary));
+  box-shadow: 0 0 10px var(--dsw-alias-state-business-primary);
+  transition: width 220ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 220ms ease;
+}
+
+.trackWrapDragging .trackFill {
+  transition: none;
+}
+
+.tick {
+  position: absolute;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dsw-alias-label-caption);
+  transform: translate(-50%, -50%);
+  transition: background 160ms ease, box-shadow 160ms ease;
+}
+
+.tickActive {
+  background: var(--dsw-alias-state-business-primary);
+  box-shadow: 0 0 6px var(--dsw-alias-state-business-primary);
+}
+
+/* 火花：已激活档位处渐强的呼吸光点 */
+.spark {
+  position: absolute;
+  top: 50%;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-business-primary);
+  box-shadow: 0 0 5px 1px var(--dsw-alias-state-business-primary);
+  transform: translate(-50%, -50%);
+  animation: rs-spark-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes rs-spark-pulse {
+  0%, 100% { opacity: 0.35; transform: translate(-50%, -50%) scale(0.8); }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.25); }
+}
+
+/* 自绘 thumb：头像 + accent 环 + 外圈光晕；回弹曲线做档位间吸附动画 */
+.knob {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  box-sizing: border-box;
+  width: 38px;
+  height: 38px;
+  border: 2px solid var(--dsw-alias-state-business-primary);
+  border-radius: 50%;
+  background: var(--thumb-image, var(--dsw-alias-interactive-bg-hover-accent)) center / cover;
+  box-shadow:
+    0 0 0 3px var(--dsw-alias-interactive-bg-hover-accent),
+    0 0 16px var(--dsw-alias-state-business-primary),
+    var(--dsw-shadow-lv2);
+  transform: translate(-50%, -50%);
+  transition: left 220ms cubic-bezier(0.34, 1.56, 0.64, 1), transform 120ms ease, box-shadow 120ms ease;
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+
+.trackWrapDragging .knob {
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.knobDragging {
+  transform: translate(-50%, -50%) scale(1.14);
+  box-shadow:
+    0 0 0 5px var(--dsw-alias-interactive-bg-hover-accent),
+    0 0 22px var(--dsw-alias-state-business-primary),
+    var(--dsw-shadow-lv3);
+}
+
+/* 原生 range：透明 thumb 承担 a11y 与键盘语义 */
+.range {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  outline: none;
+  cursor: grab;
+  touch-action: pan-y;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.range:active {
+  cursor: grabbing;
+}
+
+.range:focus-visible {
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px var(--dsw-alias-border-l3);
+}
+
+.range:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.range::-webkit-slider-runnable-track {
+  height: 100%;
+  background: transparent;
+}
+
+.range::-webkit-slider-thumb {
+  width: 40px;
+  height: 40px;
+  margin-top: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: grab;
+}
+
+.range::-moz-range-track {
+  height: 100%;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.range::-moz-range-thumb {
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: grab;
+}
+
+/* 档位标签 */
+.stops {
+  position: relative;
+  height: 54px;
+}
+
+.stop {
+  position: absolute;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  transform: translateX(-50%);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  transition: color 160ms ease;
+}
+
+.stopAvatar {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: 50%;
+  object-fit: cover;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  -webkit-user-drag: none;
+}
+
+.stopActive {
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+.stopActive .stopAvatar {
+  border-color: var(--dsw-alias-state-business-primary);
+  box-shadow: 0 0 8px var(--dsw-alias-state-business-primary);
+  transform: scale(1.06);
+}
+
+.stopName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron,
+  .knob,
+  .trackFill,
+  .tick,
+  .stop,
+  .stopAvatar,
+  .trackWrapDragging .knob {
+    transition: none;
+  }
+
+  .trackWrap:hover .track,
+  .trackWrap:hover .knob:not(.knobDragging) {
+    box-shadow: none;
+  }
+
+  .spark {
+    animation: none;
+    opacity: 0.8;
+  }
+}
+
+.status {
+  padding: 8px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.warning {
+  padding: 7px 8px;
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-module-platform);
+  color: var(--dsw-alias-state-warn-label);
+  font-size: 12px;
+  line-height: 18px;
+  margin-top: 4px;
+}
+
+.error {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  background: var(--dsw-alias-interactive-bg-hover-danger);
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.retry {
+  flex: 0 0 auto;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}

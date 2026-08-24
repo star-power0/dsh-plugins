@@ -1,0 +1,239 @@
+#!/usr/bin/env node
+/**
+ * dsh-reasoning-slider 构建脚本。
+ *
+ * `node build.mjs` —— 完整构建：
+ *   1. gen-assets：把 src/client/assets/*.png 双线性缩放到最长边 160px、
+ *      尽可能转 JPEG(q85) 后内嵌为 data URL（产物 src/client/assets.generated.js，
+ *      不入库）；档位显示名 = 文件名，顺序 = ASSET_ORDER。
+ *   2. esbuild 打包浏览器半区 src/client/index.js → 根目录 client.js
+ *      （__ModuleLoader__.load 闭包包、平台模块 external、CSS Modules 经
+ *      lightningcss 编译并自动注入 <style data-plugin>）。
+ *
+ * host 半区（index.js）为纯 ESM，无需构建，插件加载器直接导入。
+ */
+import { spawnSync } from "node:child_process";
+import { readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { basename, dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import * as esbuild from "esbuild";
+import { transform } from "lightningcss";
+
+const require = createRequire(import.meta.url);
+const ROOT = dirname(fileURLToPath(import.meta.url));
+const ASSETS_DIR = join(ROOT, "src", "client", "assets");
+const GENERATED = join(ROOT, "src", "client", "assets.generated.js");
+const ASSET_MAX_EDGE = 160;
+const JPEG_QUALITY = 85;
+const PACKAGE_ID = "dsh-reasoning-slider";
+
+/** 冻结的客户端模块表（镜像 dsh apps/web/src/platform.ts）。 */
+const CLIENT_EXTERNALS = [
+  "react",
+  "react/jsx-runtime",
+  "react-dom",
+  "react-dom/client",
+  "@deepseek-ai/cordis",
+  "@deepseek-ai/dsh-client-ui-slots",
+  "@deepseek-ai/dsh-client-web-react",
+  "@deepseek-ai/dsh-client-ui-primitives",
+  "@deepseek-ai/dsh-client-ui-attachment",
+  "@deepseek-ai/dsh-client-schema-form",
+  "@deepseek-ai/dsh-client-runtime/client"
+];
+
+/** 档位从左到右的固定顺序（显示名 = 文件名）。 */
+const ASSET_ORDER = ["牢梁", "梁子", "梁白开", "梁圣", "梁神"];
+
+let pngModule = null;
+function pngjs() {
+  if (pngModule === null) {
+    try {
+      pngModule = require("pngjs");
+    } catch {
+      pngModule = false;
+    }
+  }
+  return pngModule;
+}
+
+let jpegModule = null;
+function jpegjs() {
+  if (jpegModule === null) {
+    try {
+      jpegModule = require("jpeg-js");
+    } catch {
+      jpegModule = false;
+    }
+  }
+  return jpegModule;
+}
+
+/** 双线性缩放（flyemFSB 同款实现）。 */
+function downscale(src, maxEdge) {
+  const scale = Math.min(1, maxEdge / Math.max(src.width, src.height));
+  const w = Math.max(1, Math.round(src.width * scale));
+  const h = Math.max(1, Math.round(src.height * scale));
+  const dst = new (pngjs().PNG)({ width: w, height: h });
+  const { data } = src;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const sx = ((x + 0.5) / w) * src.width - 0.5;
+      const sy = ((y + 0.5) / h) * src.height - 0.5;
+      const x0 = Math.max(0, Math.floor(sx));
+      const y0 = Math.max(0, Math.floor(sy));
+      const x1 = Math.min(src.width - 1, x0 + 1);
+      const y1 = Math.min(src.height - 1, y0 + 1);
+      const fx = Math.min(1, Math.max(0, sx - x0));
+      const fy = Math.min(1, Math.max(0, sy - y0));
+      const o = (y * w + x) * 4;
+      for (let c = 0; c < 4; c++) {
+        const a = data[(y0 * src.width + x0) * 4 + c];
+        const b = data[(y0 * src.width + x1) * 4 + c];
+        const d = data[(y1 * src.width + x0) * 4 + c];
+        const e = data[(y1 * src.width + x1) * 4 + c];
+        dst.data[o + c] = Math.round(
+          a * (1 - fx) * (1 - fy) + b * fx * (1 - fy) + d * (1 - fx) * fy + e * fx * fy
+        );
+      }
+    }
+  }
+  return dst;
+}
+
+function genAssets() {
+  const files = readdirSync(ASSETS_DIR).filter((f) => f.endsWith(".png"));
+  const byName = new Map(files.map((f) => [basename(f, ".png"), f]));
+  const ordered = [
+    ...ASSET_ORDER.map((n) => byName.get(n)).filter((f) => f !== undefined),
+    ...files
+      .map((f) => basename(f, ".png"))
+      .filter((n) => !ASSET_ORDER.includes(n))
+      .sort()
+      .map((n) => byName.get(n))
+      .filter((f) => f !== undefined)
+  ];
+  if (ordered.length === 0) throw new Error(`build: no PNG assets in ${ASSETS_DIR}`);
+  const assets = ordered.map((file) => {
+    const raw = readFileSync(join(ASSETS_DIR, file));
+    let bytes = raw;
+    let mime = "image/png";
+    if (pngjs()) {
+      try {
+        const png = pngjs().PNG.sync.read(raw);
+        const resized = Math.max(png.width, png.height) > ASSET_MAX_EDGE ? downscale(png, ASSET_MAX_EDGE) : png;
+        if (jpegjs()) {
+          bytes = jpegjs().encode(resized, JPEG_QUALITY).data;
+          mime = "image/jpeg";
+        } else {
+          bytes = pngjs().PNG.sync.write(resized);
+        }
+      } catch (cause) {
+        console.warn(`build: pngjs could not process ${file}, embedding original bytes (${cause.message})`);
+      }
+    } else {
+      console.warn("build: pngjs unavailable — embedding original-size images (run pnpm install to enable downscaling)");
+    }
+    return { name: basename(file, ".png"), src: `data:${mime};base64,${bytes.toString("base64")}` };
+  });
+  const body = assets.map((a) => `  { name: ${JSON.stringify(a.name)}, src: ${JSON.stringify(a.src)} }`).join(",\n");
+  writeFileSync(
+    GENERATED,
+    "// Generated by build.mjs from src/client/assets/*.png — do not edit.\n"
+      + "export const EFFORT_ASSETS = [\n"
+      + `${body},\n]\n`
+  );
+  const report = assets.map((a) => `${a.name}:${((a.src.length * 0.75) / 1024).toFixed(1)}KB`).join(", ");
+  console.log(`build: embedded ${assets.length} assets (${report})`);
+}
+
+/** 客户端模块边界纯度门禁：平台条目 external，其余 @deepseek-ai 值导入一律失败。 */
+const purityGate = {
+  name: "dsh-client-bundle-purity",
+  setup(build) {
+    build.onResolve({ filter: /^@deepseek-ai\// }, (args) => {
+      if (CLIENT_EXTERNALS.includes(args.path)) return null;
+      throw new Error(
+        `client bundle purity: "${args.path}" is not a platform module — cross-plugin value imports are forbidden`
+      );
+    });
+  }
+};
+
+/** CSS Modules 经 lightningcss 编译：哈希类名 + 自动注入 <style data-plugin>。 */
+const cssModules = {
+  name: "dsh-css-modules-inline",
+  setup(build) {
+    build.onResolve({ filter: /\.module\.css$/ }, (args) => ({
+      path: resolve(args.resolveDir, args.path),
+      namespace: "css-module"
+    }));
+    build.onLoad({ filter: /.*/, namespace: "css-module" }, async (args) => {
+      const source = readFileSync(args.path);
+      const { code, exports: cssExports } = transform({
+        filename: args.path,
+        code: source,
+        cssModules: { pattern: "[hash]_[local]" },
+        minify: true
+      });
+      const classMap = {};
+      for (const [local, exp] of Object.entries(cssExports ?? {})) classMap[local] = exp.name;
+      const tagId = `${PACKAGE_ID}/${basename(args.path)}`;
+      return {
+        contents: [
+          `const css = ${JSON.stringify(code.toString())};`,
+          `const tagId = ${JSON.stringify(tagId)};`,
+          `if (typeof document !== 'undefined' && document.querySelector('style[data-plugin-css=' + JSON.stringify(tagId) + ']') === null) {`,
+          `  const tag = document.createElement('style');`,
+          `  tag.dataset.plugin = ${JSON.stringify(PACKAGE_ID)};`,
+          "  tag.dataset.pluginCss = tagId;",
+          "  tag.textContent = css;",
+          "  document.head.appendChild(tag);",
+          "}",
+          `export default ${JSON.stringify(classMap)};`
+        ].join("\n"),
+        loader: "js"
+      };
+    });
+  }
+};
+
+async function build() {
+  // 浏览器半区：客户端模块表加载的闭包工厂产物
+  await esbuild.build({
+    entryPoints: { client: join(ROOT, "src", "client", "index.js") },
+    outfile: join(ROOT, "client.js"),
+    bundle: true,
+    format: "cjs",
+    platform: "browser",
+    target: "es2022",
+    external: CLIENT_EXTERNALS,
+    jsx: "automatic",
+    loader: { ".js": "jsx", ".jsx": "jsx" },
+    define: {
+      "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV ?? "production"),
+      "import.meta.env.MODE": JSON.stringify(process.env.NODE_ENV ?? "production"),
+      "import.meta.env": JSON.stringify({ MODE: process.env.NODE_ENV ?? "production" })
+    },
+    sourcemap: true,
+    minify: true,
+    banner: {
+      js: `window.__ModuleLoader__.load({ id: ${JSON.stringify(PACKAGE_ID)}, factory: (require) => { var module = { exports: {} }; var exports = module.exports;`
+    },
+    footer: { js: "return module.exports; } });" },
+    plugins: [purityGate, cssModules],
+    logLevel: "info"
+  });
+}
+
+async function main() {
+  genAssets();
+  await build();
+  console.log("build: done — index.js (host) + client.js (browser half)");
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

@@ -1,0 +1,51 @@
+{
+  "name": "dsh-modlens",
+  "version": "0.1.0",
+  "description": "Unified DSH ModLens vision engine and capability-aware image guard",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./dsh": "./engine/dsh/index.js",
+    "./client": "./client.js",
+    "./modlens": "./engine/dsh/index.js",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "modlens": "./engine/dist/main.js"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "client-build.mjs",
+    "cordis.patch.yml",
+    "modlens/**",
+    "guard/index.js",
+    "guard/client.js",
+    "guard/client.js.map",
+    "guard/src/client.js",
+    "guard/build.mjs",
+    "README.md",
+    "README.zh-CN.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "SECURITY.md"
+  ],
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-settings-general",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-locale"
+      ],
+      "immediately": true
+    }
+  }
+}
