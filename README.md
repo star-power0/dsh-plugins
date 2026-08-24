@@ -38,7 +38,7 @@ DeepSeek Harness 本地插件集合，本仓库是 `profiles/plugins` 目录的*
 | dsh-client-ui-aqua | [WYH66666666/DSH-Transparent-UI-Plugin](https://github.com/WYH66666666/DSH-Transparent-UI-Plugin)（`@deepseek-ai/dsh-client-ui-aqua`） | MIT | 本地适配：独立设置页、本地构建链 |
 | dsh-plugin-marketplace | [YELEBAI/dsh-plugin-marketplace](https://github.com/YELEBAI/dsh-plugin-marketplace) | MIT | 固定 v0.9.1，禁用自更新；本地修复目录选择 RPC |
 | dsh-modlens | [liustack/modlens](https://github.com/liustack/modlens)（`@liustack/modlens`）+ dsh-modlens-guard | MIT | 合体插件：视觉引擎 + 请求时图片分流守卫 |
-| dsh-reasoning-slider | 原创；滑块动画效果参考 [flyemFSB/dsh-reasoning-effort-hdbzq](https://github.com/flyemFSB/dsh-reasoning-effort-hdbzq) | MIT（参考部分） | 原创为主 |
+| dsh-reasoning-slider | 原创；滑块动画效果参考 [flyemFSB/dsh-reasoning-effort-hdbzq](https://github.com/flyemFSB/dsh-reasoning-effort-hdbzq)（其仓库未附 LICENSE 文件；沿用 3 张档位头像图） | MIT | 原创为主 |
 | dsh-tool-memory-lite | 原创 | — | MIT |
 | dsh-model-enhancer | 原创 | — | MIT |
 | dsh-session-manager | 原创 | — | MIT |

@@ -1,6 +1,10 @@
 MIT License
 
-Original work Copyright (c) 2024 elysia395 (dsh-wallpaper-engine)
+Upstream project: elysia395/dsh-wallpaper-engine
+(https://github.com/elysia395/dsh-wallpaper-engine)
+Upstream licensing: MIT, declared via the "license" field of its
+package.json; the upstream repository does not ship a LICENSE file.
+
 Modifications Copyright (c) 2026 star-power0 (zhiqiang huang)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy

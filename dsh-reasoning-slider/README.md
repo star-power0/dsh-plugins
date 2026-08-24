@@ -1,6 +1,6 @@
 # dsh-reasoning-slider
 
-> **来源与许可**：本项目为 DeepSeek Harness 插件原创开发（MIT）；滑块动画效果参考 [flyemFSB/dsh-reasoning-effort-hdbzq](https://github.com/flyemFSB/dsh-reasoning-effort-hdbzq)（MIT）。详见仓库根目录 [README.md](../README.md) 的来源与许可总表。
+> **来源与许可**：本项目为 DeepSeek Harness 插件原创开发（MIT）。滑块动画的交互效果与视觉风格参考 [flyemFSB/dsh-reasoning-effort-hdbzq](https://github.com/flyemFSB/dsh-reasoning-effort-hdbzq)（其仓库未附 LICENSE 文件；3 张档位头像图沿用该项目资产，2 张为本项目新生成）。详见仓库根目录 [README.md](../README.md) 的来源与许可总表。
 
 DeepSeek Harness 插件：**5 档思考强度**。两个半区各解决一半问题：
 
