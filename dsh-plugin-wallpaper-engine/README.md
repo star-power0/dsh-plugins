@@ -7,185 +7,68 @@
 - 源码经本地构建链重建 lib/client.js（上游仓库中的产物为过期版本）
 # dsh-plugin-wallpaper-engine
 
-[English](README.md) | [中文](README.zh.md)
+## 项目简介
 
-A DSH bundle that turns your **Wallpaper Engine** wallpapers into the **background of the DSH web GUI** (`dsh web`).
+dsh-plugin-wallpaper-engine（包名 `dsh-plugin-wallpaper-engine`，0.1.4，MIT 许可）将本机 Wallpaper Engine 壁纸库渲染为 DeepSeek Harness 网页界面（`dsh web`）后方的动态背景。插件自动发现本机 Wallpaper Engine 安装、列出壁纸，并将可移植类型（Video `.mp4` 与 Web/HTML）渲染至对话界面后方，配以 iOS 风格液态玻璃效果；提供四个实时滑动条、多列表轮播与设置页缩略图选择器。
 
-It discovers the Wallpaper Engine install on your machine, lists its wallpapers, and renders the *portable* ones (Video `.mp4` and Web/HTML) behind the DSH chat interface with an iOS-style **liquid glass** effect. You pick the wallpaper from a settings row, fine-tune it with four sliders, and pause/clear it anytime.
+## 功能特性
 
-## Why only Video and Web wallpapers?
+- **壁纸发现**：自动定位本机 Wallpaper Engine 安装（读取注册表 `HKCU\Software\Valve\Steam` 的 `SteamPath` 并解析各库的 `libraryfolders.vdf`，识别含 appid `431960` 且存在 `wallpaper32.exe` 的目录），随后枚举 `projects/defaultprojects`、`projects/myprojects` 与 `steamapps/workshop/content/431960` 下的 `project.json`。
+- **可移植类型**：Video（`.mp4`）经 `<video>` 播放，Web（HTML）经 `<iframe>` 加载；Scene（原生 3D）与 Application 类型不可内嵌。
+- **液态玻璃**：iOS 风格玻璃效果，以四个实时滑动条调节壁纸与界面的融合（见「使用说明」）。
+- **多列表轮播**：自定义轮播列表，每列表独立设置切换间隔（1/5/10/30/60/120 分钟）与顺序（顺序/随机）。
+- **独立设置页**：以 `settings.section` 注册（id `wallpaper-engine`，order 110，标签「动态壁纸」），配自绘页面图标 WallpaperGlyph（画框 + 山峦 + 光点）。
+- **壁纸类型过滤**：选择器只列可渲染的 Video/Web 壁纸，隐藏 Scene/Application 类型；统计行显示「已隐藏 N 个 Scene/应用类」。
 
-Wallpaper Engine wallpapers come in four types:
+## 工作原理
 
-| Type | Rendered by | Portable to DSH? |
-|---|---|---|
-| **Scene** | Wallpaper Engine's own 3D engine | ❌ No — native 3D (`.obj`/shaders), only WE can render it |
-| **Video** | a plain `.mp4` file | ✅ Yes — plays in a `<video>` tag |
-| **Web** | a Chromium (`webwallpaper64.exe`) host for HTML | ✅ Yes — loads in an `<iframe>` |
-| **Application** | an injected external window | ❌ No |
+- **宿主端**（`lib/index.js`）：定位 Wallpaper Engine 安装、枚举壁纸，并在 DSH webserver 注册同源 HTTP 路由：
+  - `GET /wallpaper-engine/inventory` → 壁纸 JSON 列表
+  - `GET /wallpaper-engine/media/<token>` → 视频 / HTML（支持 Range）
+  - `GET /wallpaper-engine/preview/<token>` → 预览图
+- **客户端**（`lib/client.js`）：拉取壁纸列表，将选中壁纸渲染至应用列后方的固定图层，并提供缩略图选择器。客户端标记 `dsh.client.platform: "web"` 且 `immediately: true`，Desktop 端同样加载。
 
-This is the same fundamental limit that applies to **mineradio** and every other
-third-party Wallpaper Engine integration: only *Video* and *Web* wallpapers are
-portable. The current local build filters Scene and Application wallpapers from the playable list.
+## 安装与接入
 
-## How it works
+本地接入采用双端手工注册：Web 与 Desktop 两个 profile 的 `package.json` 以 `link:` 依赖指向插件目录，`cordis.patch.yml` 登记唯一实例（id `wallpaper-engine`，name `dsh-plugin-wallpaper-engine`）。插件不写入 `dsh.profile.bundles`，以免与手工 insert 双加载导致 Host 启动失败。壁纸发现全自动，无配置项。
 
-- **Host half** (`lib/index.js`): a Cordis plugin that
-  1. locates the Wallpaper Engine install by reading Steam's `libraryfolders.vdf`
-     (so it works even when Steam is on a non-default drive),
-  2. enumerates wallpapers from `projects/defaultprojects`, `projects/myprojects`,
-     and `steamapps/workshop/content/431960/*`,
-  3. registers same-origin HTTP routes on the DSH webserver so the browser half
-     can fetch data and stream media directly:
-     - `GET /wallpaper-engine/inventory` → JSON list of wallpapers
-     - `GET /wallpaper-engine/media/<token>` → video / HTML (Range supported)
-     - `GET /wallpaper-engine/preview/<token>` → preview image
-- **Client half** (`lib/client.js`): a browser module that fetches the inventory
-  and renders the selected wallpaper into a fixed layer *behind* the app columns,
-  plus a "Wallpaper Engine" row in General settings with a picker.
+## 构建
 
-## Install
-
-### For users (published version, recommended)
-
-If you simply want to use the plugin, install the published package from npm:
+宿主端 `lib/index.js` 为纯 ESM，无构建步骤。客户端 `lib/client.js` 为编译产物，由规范源文件 `src/client.js` 经 `scripts/build-client.mjs` 生成，输出 DSH 模块加载器要求的 `window.__ModuleLoader__.load({ id, factory })` 外壳。修改 `src/client.js` 后运行：
 
 ```sh
-dsh plugin --profile web add dsh-plugin-wallpaper-engine
+node scripts/build-client.mjs   # 从 src/client.js 重新生成 lib/client.js
+node scripts/verify-client.mjs  # 校验生成产物
 ```
 
-Then restart `dsh web` and open **Settings → General → Wallpaper Engine**.
+不要手改 `lib/client.js`。
 
-### For developers (running your own copy)
+## 使用说明
 
-**For most people you can skip this section.** You only need it if you want to
-work on the plugin's code yourself. The steps below assume you know what a command
-line and a *repository* (a code folder that is under Git version control) are.
+1. 打开独立设置页「动态壁纸」。
+2. 在缩略图选择器中选择一个 Video 或 Web 壁纸，它将出现在界面后方。
+3. 使用「暂停/播放」暂停视频壁纸，使用「关闭」清除壁纸；选择保存在浏览器 `localStorage`（键 `dsh-wallpaper-engine:selection`）。
 
-**1. Get the code (`checkout`)**
+四个滑动条即时生效，无需刷新页面：
 
-> *What "checkout" means:* it just means "download/get a copy of the source code
-> into a folder on your machine." Typically you click **Code → Download ZIP** on
-> this GitHub page and unzip it, or clone it with Git:
->
-> ```sh
-> git clone https://github.com/elysia395/dsh-wallpaper-engine.git
-> ```
->
-> After this you have a folder that contains `package.json`, `lib/`, `src/`, and
-> `cordis.patch.yml`. That folder is what the rest of this section calls
-> **the plugin folder**.
-
-**2. Install it using its folder path (`link:`)**
-
-> *What `link:` means here:* it tells `dsh` (which forwards the command to `pnpm`)
-> to make a *link* to your local plugin folder instead of downloading a package
-> from the internet. The benefit: when you edit the code and rebuild, the change
-> shows up without reinstalling.
-
-Replace `<插件文件夹绝对路径>` below with the **full path of your plugin folder**
-(the "address bar" path you see when you open that folder in Explorer / your file
-manager):
-
-```sh
-dsh plugin --profile web add link:<插件文件夹绝对路径>
-```
-
-**Concrete example** — if your plugin folder is at a path like `D:\dev\dsh-wallpaper-engine`:
-
-```sh
-dsh plugin --profile web add link:D:\dev\dsh-wallpaper-engine
-```
-
-You can also use a relative path if your shell's current directory is already the
-folder's parent:
-
-```sh
-dsh plugin --profile web add link:./dsh-wallpaper-engine
-```
-
-> **Which exact path to fill in?** It must be the **folder that contains
-> `package.json`** — not the path to `package.json` itself, and not any file inside.
-> It is the same value you would paste into Explorer's address bar to open that folder.
-
-> Why prefer `link:` over `file:`? `link:` creates a live link to your source
-> folder, so edits to `src/client.js` + `npm run build` take effect without
-> reinstalling; `file:` packs a static snapshot, which needs a re-add after every
-> change. Both work for a first install.
-
-Then restart `dsh web`. The host plugin becomes a bundle layer and the client
-plugin auto-loads (`dsh.client.immediately: true`).
-
-If your machine has Steam installed in a non-standard location, the host auto-detects
-via `libraryfolders.vdf`. Nothing further is required.
-
-## Usage
-
-1. Open `dsh web` → the DSH GUI.
-2. Open **Settings → General** and find the **Wallpaper Engine** row.
-3. Pick a Video or Web wallpaper from the dropdown. It appears behind the app.
-4. Use **暂停/播放** to pause a video wallpaper, and **关闭** to clear it.
-   The choice is remembered in your browser's `localStorage` (key
-   `dsh-wallpaper-engine:selection`).
-
-### Automatic rotation (轮播列表)
-
-Rotation runs over **user-defined carousel lists** (轮播列表). Create any number of lists with **新建**, pick Video/Web wallpapers into each from the inventory, give each list its own switch interval (1, 5, 10, 30, 60 or 120 minutes) and order (顺序/随机), then enable **自动轮转** on the list you want active. Lists are persisted in your browser's `localStorage` and are fully client-side — rotation never depends on Wallpaper Engine's own `config.json` playlist paths.
-
-At least two playable Video/Web wallpapers per list are required; manual changes reset the next timer; each list keeps its own cadence, so you can have one list switching every 5 minutes and another every 30. On first run, the first playable Wallpaper Engine playlist is imported automatically as a list so the feature works out of the box; **从 WE 播放列表导入** inside the editor imports any other playlist into the list being edited. Scene and Application wallpapers cannot be embedded in the web UI, so they are automatically excluded from rotation while remaining visible in the picker as `[不可播放]`.
-
-### The four sliders
-
-While a wallpaper is active, four sliders let you tune how it blends with the UI:
-
-| Slider | What it controls | Range | Default |
+| 滑动条 | 作用 | 范围 | 默认 |
 |---|---|---|---|
-| **壁纸模糊** (wallpaper blur) | Blurs the wallpaper itself | 0–60 px | 0 |
-| **暗化** (scrim) | Darkens the overlay between wallpaper and text | 0–90 % | 25 % |
-| **边框** (border) | Raises border/divider contrast | 0–90 % | 35 % |
-| **玻璃** (glass) | Blur radius of the frosted-glass panels (composer, bubbles) | 0–40 px | 24 |
+| 壁纸模糊 | 模糊壁纸本身 | 0–60 px | 0 |
+| 暗化 | 加深壁纸与文字之间的遮罩 | 0–90 % | 25 % |
+| 边框 | 提高边框/分割线对比度 | 0–90 % | 35 % |
+| 玻璃 | 玻璃面板（输入栏、气泡）的模糊半径 | 0–40 px | 24 |
 
-> **Light vs. dark mode** — Wallpapers differ wildly in colour and brightness, so
-> there is no one mode that fits every wallpaper. Switch DSH's theme between
-> **light** and **dark** to find which suits the current wallpaper. If text or
-> hairlines become hard to read on a bright or busy wallpaper, raise the
-> **暗化 / 边框** sliders (and optionally add a little **壁纸模糊**) until it is
-> comfortable. All four sliders apply instantly — no page refresh needed.
+轮播：以「新建」创建轮播列表，从库存勾选 Video/Web 壁纸，为每个列表设置切换间隔与顺序，勾选「自动轮转」后在该列表内循环；每列表至少 2 个可播放壁纸。首次使用自动导入第一个可播放的 WE 播放列表；编辑列表时可用「从 WE 播放列表导入」导入其他播放列表。
 
-## Configuration
+## 安全
 
-There is no model-visible tool or prompt text. The bundle adds zero tokens to the
-agent. All state is process-local/browser-local; no durable DSH settings are written.
+- 不向模型暴露工具、提示或 schema，对 agent 零 token 开销。
+- 媒体字节留在磁盘，持久化仅保存 URL + 模式 + 亮度。
+- 宿主仅提供已枚举文件的媒体路由，不暴露任意文件系统。
+- 无需 Wallpaper Engine 进程运行。
 
-## Limitations
+## 已知限制
 
-- Scene (native 3D) and Application wallpapers cannot be embedded; they appear as
-  `[不可播放]` in the picker. Their live render remains Wallpaper Engine's desktop job.
-- The browser must be able to autoplay muted `<video>` (DSH runs on loopback; muted
-  autoplay is allowed by modern browsers).
-- Media is served from your local Wallpaper Engine install paths; the host only
-  serves files it has already enumerated (no arbitrary filesystem exposure).
-- The picker is English/Chinese mixed (this bundle is not yet wired into DSH's
-  locale namespaces).
-
-## Development / rebuild
-
-The host half (`lib/index.js`) is plain ESM with no build step. The client half
-(`lib/client.js`) is a **compiled artifact** produced from the canonical source
-`src/client.js` by `scripts/build-client.mjs`, which emits the exact
-`window.__ModuleLoader__.load({ id, factory })` envelope the DSH module loader
-consumes (the same shape `tsdown` emits for in-box client packages).
-
-```sh
-npm run build      # regenerate lib/client.js from src/client.js
-npm run verify     # materialize the emitted bundle and assert its exports
-```
-
-Edit `src/client.js`, then `npm run build`. Do not hand-edit `lib/client.js`.
-`npm install`/`pnpm install` runs `prepare` → `build` automatically, so a
-fresh checkout always ships a current `lib/client.js`.
-
-The host↔browser contract is plain same-origin HTTP, so the two halves are
-developed independently: rebuild the host by restarting `dsh web`, and rebuild
-the client with `npm run build` before re-running `dsh web`.
-
+- Scene（原生 3D）与 Application 壁纸无法内嵌，已从选择器隐藏。
+- 浏览器需能自动播放静音 `<video>`（DSH 运行于 loopback，现代浏览器允许静音自动播放）。
+- 媒体从本机 Wallpaper Engine 安装路径提供。

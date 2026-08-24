@@ -6,178 +6,76 @@
 - 修复 rc.6 壳上 dsh-ui 围栏静默不渲染问题
 - /panel slash 候选前缀过滤（只在输入匹配 panel 时返回候选）
 - Safari 无锚点行降级链与一次性告警
-# 🎨 dsh-genui
+# dsh-genui
 
-<div align="center">
+## 项目简介
 
-**English** · [简体中文](./README.zh-CN.md)
+dsh-genui（包名 `@omdsh-dev/dsh-genui`，MIT 许可）是面向 DeepSeek Harness 的生成式 UI 插件。模型在回答中以 `dsh-ui` 代码围栏输出 JSON 规格，插件在浏览器端将其渲染为可交互组件——布局、卡片、表格、图表、函数图、表单、测验、Mermaid 图与 3D 场景等 30 余种白名单类型。带 `action` 的控件在交互时把事件回传模型，模型据此更新界面，形成「界面 → 交互 → 模型更新界面」的闭环；组件状态按「会话 + 内容指纹」持久化。插件随包提供宿主端插件（向系统提示注入 dsh-ui 围栏词汇表）、浏览器端渲染器与 `genui` 技能（SKILL.md）。
 
-</div>
+## 功能特性
 
-> Give the model's answers a face — the text is still there, and an interactive UI is already live.
->
-> 🔌 Ecosystem: the repo carries the `#dsh` · `#dsh-plugin` topics — welcome to be listed by @dsh-plugin.
+- **回答即界面**：组件内嵌于回答并流式渲染，边生成边出现，无需等待整段回答完成。
+- **30+ 组件**：卡片、表格、图表、表单、标签页、折叠面板、文件树、时间线、diff 等白名单组件。
+- **函数图**：`plot` 绘制曲线，参数滑块拖动实时重绘，支持自动动画。
+- **测验与本地判卷**：`quiz` 点选判题并给出解析，支持重试；带 `action` 时答案同时回传模型（判题保持本地即时）。多道选择题由每题的 `radio`（`group` + `answer` + `explanation`）与一个 `submit` 按钮构成：全部作答后一次提交，分数、每题对错与解析即时在界面呈现，零模型往返；题目随后锁定，「重新作答」本地重置（可选 `resetAction` 通知模型）。
+- **状态持久化**：答案、交卷锁定与输入值按「会话 + 内容指纹」自动保存；刷新页面或重开会话原样恢复，重渲染相同内容保留用户状态，新内容自动从头开始；上限 200 块，LRU 淘汰。
+- **表单语义**：`input` 回车、`textarea` Ctrl+Enter 即时提交（`submit:true`）；带 `id` 的字段值汇入 `submit` 的 `fields`。
+- **本地优先**：界面可自行完成的状态变化（判卷、判题、重置、展开、选中）一律本地即时完成；`action` 仅用于必须模型参与的操作（生成内容、执行工具、下一步建议）。
+- **事件循环**：带 `action` 的按钮/开关/输入/下拉/复选/单选/文本域/测验在点击或失焦时回传模型；同名 `action` 300 ms 尾沿防抖，连点合并为一次（以最后一次值为准）。
+- **工具通道**：`render_ui` 工具将同一份规格渲染为工具行卡片；交付物型界面走工具通道，回答型界面走围栏。
+- **会话面板**：常驻输入区上方的 dock；`render_ui` 与 `panel: true` 围栏原地更新同一块界面；`/panel` 命令客户端直开（`/panel <指令>` 交模型定制、`/panel clear` 清空）；顶边框可拖拽调高；`append: true` 增量合并（同名标签页追加、新标签页新增），整面板上限 200 节点 / 200 条追加。
+- **自愈与上限**：每个围栏经规格守卫——坏节点静默丢弃、数值钳位、字符串截断，整树 ≤200 节点、≤8 层嵌套。
+- **图错误自愈**：Mermaid 渲染失败自动修复重试（剥离反引号、引号化中文/空格标签、移除 `<br/>`），仍失败才降级为源码。
+- **可访问性**：标签页/折叠/开关/进度条带完整 ARIA 与键盘导航（方向键切页、Home/End 跳转）。
+- **零打扰**：未安装插件时围栏仅为代码块，不报错、不污染会话。
 
-The model no longer just answers in text. Install this plugin, ask "how are this month's orders doing", and it renders a **clickable data panel** right inside the answer as it analyzes: watch trends, drag sliders, hit refresh — and the model actually responds.
+## 渲染通道
 
-<div align="center">
+插件内置两套渲染通道，启动时自动选择，不依赖特定宿主版本：
 
-https://github.com/user-attachments/assets/f5db33ec-7471-4d4a-a85b-79c9962ab4ef
+- **Registry 通道**：宿主提供 `fence-registry` 扩展点（新版构建）时，围栏经宿主流式渲染管线注册，与宿主无缝配合。
+- **DOM 通道**：宿主无该扩展点（含原版 DSH 与旧版构建）时，插件观察会话 DOM 自行挂载渲染树；支持流式渲染与多表面发现（`md-code-block`、`.code-block` / `.code-block-small`，以及「banner 标注 `dsh-ui` 且含 `<pre>` 正文」的结构兜底）。
 
-</div>
+无论走哪条通道，组件、交互、面板与持久化行为一致。
 
-<p align="center">
-  <img src="./assets/showcase-panel.png" width="92%" alt="Real rendering: an interactive monitoring panel">
-  <br><em>Real output: an interactive monitoring panel rendered by the model (click "refresh" and it regenerates the data)</em>
-</p>
+## 安装与接入
 
-> Player won't load? [Download the mp4](./assets/demo.mp4). Four-act demo script: [demo-prompts.md](./demo-prompts.md).
+本地接入采用双端手工注册：Web 与 Desktop 两个 profile 的 `package.json` 以 `link:` 依赖指向插件目录（依赖 key 使用带 scope 的包名 `@omdsh-dev/dsh-genui`），`cordis.patch.yml` 登记实例（id `genui`，name `@omdsh-dev/dsh-genui`）。插件不写入 `dsh.profile.bundles`，以免与手工 insert 双加载导致 Host 启动失败。
 
----
+运行时依赖在插件目录内以 `pnpm install --prod --ignore-scripts` 安装（react 18.3.1 与 8 个 `@deepseek-ai/*` rc.6 peer 包）。
 
-## ⚠️ Read this first: dual-channel rendering (works with any dsh build)
+> 注意：对刚克隆的目录直接使用 `link:` 不会安装插件依赖（mermaid / three / react），渲染器将无法工作。本地已先执行 `pnpm install` 再 link，规避该问题；仅本地开发迭代使用 `link:` 模式。
 
-The plugin ships **two rendering channels** and picks one automatically at startup — no dependency on a specific host version:
+## 构建
 
-- **Registry channel**: when the host exposes the `fence-registry` extension point (newer dsh builds), fences register through the host's streaming render pipeline and behave seamlessly with the host;
-- **DOM channel**: when the host lacks that extension point (including stock DSH and older builds), the plugin observes the session DOM and mounts its own render tree. Since 0.7.2 it **supports streaming rendering**: components appear as the model writes them — the first finished component shows up immediately, no need to wait for the whole reply. Since 0.8.3 fence discovery is **multi-surface**: it matches the stock `md-code-block` surface, the deepsuite-style `.code-block` / `.code-block-small` surfaces some host builds render instead, and — as a structural backstop — any element whose banner labels it `dsh-ui` and contains a `<pre>` body. If your dsh build renders fences with a different class name, they still render (and a one-time console warning tells you the host DOM drifted).
+宿主端入口为 `lib/index.js`（`apply` + 注入 `systemPrompt`），客户端入口为 `lib/client.js`（`dsh.client.platform: "web"`，Desktop 端同样加载）。mermaid 与 three.js 引擎作为按需资产（`lib/assets/*.js`）由插件自注册 HTTP 路由托管，`lib/client.js` 体积约 124 KB。
 
-Whichever channel is active, components, interactions, panels, and persistence behave identically.
-
----
-
-## ✨ Before vs. after
-
-| Plain answer | With dsh-genui |
-|---|---|
-| "Revenue this month: ¥128,430, +12.4% MoM — watch the conversion rate." | One line of analysis + three stat cards (revenue / orders / conversion), a trend chart, and a progress bar rendered right beside it |
-| Want to see more? Type another question. | The panel already has "Refresh" / "Switch view" buttons — click, and the model updates the data |
-
-## 🚀 Quick start
-
-Prerequisites — all required:
-
-1. **dsh installed** (any open-source build works — the plugin picks its rendering channel at startup, see "dual-channel rendering" above)
-2. **`pnpm` on your PATH**: the `dsh plugin` command depends on it. If missing: `corepack enable` (or `npm i -g pnpm`), then **open a new terminal** and confirm `pnpm -v` prints a version
-
-Install (one command, all dependencies included):
+本地构建：
 
 ```sh
-# Public GitHub install (works without an npm account)
-dsh plugin --profile web add git+https://github.com/omdsh-dev/dsh-genui.git
+tsc -p tsconfig.json
+tsdown
 ```
 
-> ⚠️ **Don't use `link:` on a freshly cloned directory** — `link:` does not install the plugin's dependencies (mermaid / three / react), so the renderer will break. Use the git URL form above; reserve `link:` for local development iteration (see below).
-
-Restart dsh web + hard refresh, then in a new session say "use dsh-ui to draw a stats dashboard" to verify.
-
-### One-click script (recommended)
-
-After cloning, just run it — the script checks the prerequisites above, performs the install, and prompts you to restart:
+完整校验（类型检查 + 全量测试 + 构建）：
 
 ```sh
-git clone https://github.com/omdsh-dev/dsh-genui.git
-cd dsh-genui
-./scripts/install.sh
+pnpm run check
 ```
 
-### Developer iteration (link mode)
+## 使用说明
 
-```sh
-cd dsh-genui
-pnpm install
-dsh plugin --profile web add link:$PWD
-```
+安装并重启后，在新会话中让模型「用 dsh-ui 输出」即可。组件 JSON 语法见随包 [SKILL.md](./SKILL.md)；本地技能已置于 `dsh-home/skills/genui/SKILL.md`，由技能目录实时识别。
 
-## 🧩 What it can do
+## 安全
 
-- **Answer-as-UI**: components are embedded in the reply and appear as they stream — no waiting for the whole message
-- **30+ components**: cards, tables, charts, forms, tabs, accordions, file trees, timelines, diffs…
-- **Function plots**: `plot` draws curves; parameter sliders redraw in real time, with optional auto-animation
+- 组件类型白名单，模型无法注入 HTML 或脚本。
+- 函数表达式经独立解析器处理，不使用 `eval`。
+- 颜色字段格式白名单（hex / rgb / hsl / `var(--dsw-*)`）。
+- 链接仅允许 http(s) 与 mailto。
+- 秘密禁令：不得索取密码、API Key、访问令牌、恢复码等秘密；密码输入即使出现也保持打码、不持久化、不进表单收集。
+- 规格守卫：整树 ≤200 节点、≤8 层嵌套，坏节点静默丢弃。
 
-<p align="center">
-  <img src="./assets/showcase-plot.png" width="60%" alt="Function plotting: drag a slider for live redraw">
-</p>
+## 已知限制
 
-- **Quiz**: `quiz` grades on click with explanation and retry; with `action`, the answer is also sent back to the model (grading stays local and instant)
-- **Local grading (submit)**: a multiple-choice set = one `radio` per question with `group` + `answer` (correct answer) + `explanation`, plus one `submit` button — after the user answers everything and clicks once, **the score, per-question right/wrong, and explanations appear right in the UI with zero model round-trips**; the quiz then locks, and "retake" resets locally (optional `resetAction` notifies the model). Questions without an answer fall back to an aggregated action (`fields` collects every input with an `id`)
-- **State persistence**: answers, submission locks, and input values are saved per "session + content fingerprint" — refresh or reopen restores everything; re-rendering identical content keeps user state; new content starts fresh; LRU cap of 200 blocks
-- **Form semantics**: `input` Enter / `textarea` Ctrl+Enter submits immediately (`submit:true`), no blur needed; fields with an `id` are collected into the submit's `fields`
-- **Secrets ban**: GenUI must never ask for passwords, API keys, access tokens, recovery codes, or other secrets; even if a password input appears, it stays masked, is never persisted, and never enters form collection
-- **Local-first principle**: state changes the UI can do itself (grading, quiz checking, resets, expand/collapse, selection) always happen locally and instantly; actions are reserved for things that genuinely need the model (generating new content, running tools, next-step suggestions)
-- **Honest interactions**: interactive components must carry `action`; buttons without one render disabled (kills the "looks clickable, does nothing" fake button); buttons with `action` show instant "triggered" local feedback (proof the local event fired, not that the model received it)
-- **Event loop**: buttons/switches/inputs/dropdowns/checkboxes/radios/textareas/quizzes carry `action`; click or blur sends back to the model, which updates the UI; same-name actions are debounced with a 300 ms trailing edge — rapid clicks merge into one (last value wins)
-- **Tool channel**: the `render_ui` tool renders the same spec as a card in the tool row (deliverable-style UI goes through the tool, answer-style UI through the fence)
-- **Session panel**: a persistent dock above the composer; `render_ui` / `panel: true` fences update the same surface in place; `/panel` opens it from the client (`/panel <instruction>` customizes via the model, `/panel clear` clears); the top border is draggable to resize; `append: true` merges incrementally — same-named tabs append content, new tabs get added; the whole panel caps at 200 nodes / 200 appends, after which the model should send `replace` to rebuild
-- **Self-healing & limits**: every fence passes a spec guard — bad nodes are silently dropped, numbers clamped, strings truncated; the whole tree is capped at 200 nodes / 8 nesting levels; pathological specs never crash the UI
-- **Chart error self-healing**: mermaid failures auto-retry with repairs (strip backticks, quote Chinese/space labels, remove `<br/>`) before degrading to source; a broken chart never hits the screen
-- **Accessibility**: tabs/accordions/switches/progress bars carry full ARIA and keyboard navigation (arrow keys switch tabs, Home/End jump)
-- **Zero intrusion**: without the plugin, fences are just code blocks — no errors, no session pollution
-
-Component JSON syntax: [SKILL.md](./SKILL.md) (also copyable to `~/.dsh/skills/genui/` to boost the model).
-
-## 📄 Example
-
-The model outputs this fence (written for the browser — you don't need to read it):
-
-```dsh-ui
-{"title":"Order overview","items":[
-  {"type":"stat","label":"Total revenue","value":"¥128,430","delta":"+12.4%"},
-  {"type":"stat","label":"Orders","value":"1,024","delta":"-3.1%"}
-]}
-```
-
-What you see: two stat cards.
-
-## 🔧 How it works
-
-The model writes the interface description as JSON inside a `dsh-ui` fence; the browser-side renderer (`src/client`) claims this language through the main repo's `fence-registry` interface and renders it. Components are whitelisted — the model can't smuggle in HTML/scripts; function expressions go through a standalone parser, never `eval`.
-
-The core render package stays light (≈110 KB min / 28 KB gzip); the mermaid and three.js engines are bundled separately as on-demand assets (loaded through the plugin's self-registered HTTP routes the first time they're used), so startup only downloads the rendering core.
-
-## ❓ FAQ
-
-- **Rendering as a code block?** Check three things: your dsh build has fence-registry (see "dual-channel rendering" at the top — builds without the extension point fall back to the DOM channel), `dsh plugin --profile web list` shows this plugin, restart + hard refresh.
-- **Chat UI goes blank when rendering a dsh-ui fence?** Your dsh is too old — update dsh first, then reinstall the plugin.
-- **`dsh: pnpm not found on PATH`?** Install pnpm, then **open a new terminal** and retry (`corepack enable` or `npm i -g pnpm`).
-- **Stuck on git credentials / 404 during install?** The repo is public (`omdsh-dev/dsh-genui`) — the git URL above needs no login; a 404 for `@omdsh-dev/dsh-genui` means the npm package has not been published yet.
-- **Installed but scene3d/mermaid don't render?** The engines (mermaid / three) are no longer inlined in client.js — they load on demand the first time they're used (`/plugins/@omdsh-dev/dsh-genui/assets/*.js`, hosted by the plugin's own HTTP routes). First restart dsh web + hard refresh (Cmd+Shift+R); still broken, remove and reinstall (`dsh plugin --profile web remove @omdsh-dev/dsh-genui`, then add again). Hosts without the asset routes degrade to source/load-error hints — update dsh.
-- **Model not outputting fences?** New sessions pick it up after a restart; or just say "output it with dsh-ui".
-- **No lib/ after cloning?** Build it yourself: `pnpm install && pnpm run check`.
-
-## 🧑‍💻 Development
-
-```sh
-pnpm install
-pnpm run check   # type check + full tests + build
-```
-
-### Real-device e2e
-
-The real chain end to end: start a temporary dsh web → install the plugin → send a message in a browser so the model outputs a `dsh-ui` fence → assert the rendering → click an action button → assert the model responds (event-loop closure):
-
-```sh
-DEEPSEEK_API_KEY=sk-... node scripts/e2e.mjs          # link-installs the current workspace
-DEEPSEEK_API_KEY=sk-... node scripts/e2e.mjs --install git   # friend path (git URL)
-```
-
-Prereqs: `dsh`/`pnpm` on PATH, `DEEPSEEK_API_KEY`, and the main repo's web build output (playwright resolves it from the main repo). On PASS it saves an `e2e-final.png` screenshot.
-
-## 🗺️ Roadmap (evaluated)
-
-| Direction | Verdict | Rationale |
-|---|---|---|
-| Incremental patching (model sends diffs, not full specs) | Not doing | A fence costs 200–800 tokens; resending is nearly free; a patch protocol's teaching cost and error rate aren't worth it. Revisit if sub-second auto-refreshing panels ever appear |
-| Action debounce/dedup | ✅ Done (300 ms trailing edge, per action name) | Rapid-click spam is real friction; one choke point |
-| Cross-session state persistence (replay restores tabs/switches) | Not doing | Replay-reset is the more correct default (the model has already updated the UI with a new fence); state survives naturally during streaming |
-| MCP adapter / standalone gallery page / i18n | Not doing | No cross-tool demand signal; gallery material is covered by `gallery.ts` + demo-prompts + README screenshots; only 6 built-in strings |
-
-Tests parse the dsh source (`vitest.config.ts`'s `DSH_ROOT`, default `~/.dsh/source/current`).
-
-## 🔗 Friendly links
-
-- [Linux.do](https://linux.do)
-
----
-
-📄 License: MIT
+无。
