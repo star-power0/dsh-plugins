@@ -1,3 +1,5 @@
+> **来源与许可**：基于 [WYH66666666/DSH-Transparent-UI-Plugin](https://github.com/WYH66666666/DSH-Transparent-UI-Plugin)（@deepseek-ai/dsh-client-ui-aqua 1.3.0，MIT）开发，本地适配为 1.3.1（独立设置页、本地构建链）。详见仓库根目录 [README.md](../README.md) 的来源与许可总表。
+
 # @deepseek-ai/dsh-client-ui-aqua
 
 English | [中文](README.zh.md)

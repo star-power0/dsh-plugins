@@ -1,3 +1,5 @@
+> **来源与许可**：基于 [SherUnlocked-4869/dsh-plugin-msg-nav](https://github.com/SherUnlocked-4869/dsh-plugin-msg-nav) 0.2.0（MIT）开发，固定该版本以获得两个未被 Registry 收录的关键修复。详见仓库根目录 [README.md](../README.md) 的来源与许可总表。
+
 **简体中文** | [English](./README.en.md)
 
 [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)

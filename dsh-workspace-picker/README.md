@@ -1,3 +1,5 @@
+> **来源**：本项目为 DeepSeek Harness 插件原创开发，许可证 MIT。
+
 # dsh-workspace-picker
 
 DSH 工作区目录选择增强插件。

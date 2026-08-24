@@ -1,3 +1,5 @@
+> **来源与许可**：基于 [elysia395/dsh-wallpaper-engine](https://github.com/elysia395/dsh-wallpaper-engine) 0.1.4（MIT）开发，本地增强独立设置页、自绘图标与壁纸类型过滤。详见仓库根目录 [README.md](../README.md) 的来源与许可总表。
+
 # dsh-plugin-wallpaper-engine
 
 [English](README.md) | [中文](README.zh.md)

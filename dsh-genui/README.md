@@ -1,3 +1,5 @@
+> **来源与许可**：基于 [omdsh-dev/dsh-genui](https://github.com/omdsh-dev/dsh-genui)（MIT）开发，本地适配 rc.6 双通道渲染与 slash 候选过滤。详见仓库根目录 [README.md](../README.md) 的来源与许可总表。
+
 # 🎨 dsh-genui
 
 <div align="center">

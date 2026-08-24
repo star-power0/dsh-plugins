@@ -1,3 +1,5 @@
+> **来源**：本项目为 DeepSeek Harness 插件原创开发，许可证 MIT。
+
 # dsh-tool-memory-lite
 
 极简记忆工具插件。只有模型明确调用记忆工具时才写入，不会自动记录对话。

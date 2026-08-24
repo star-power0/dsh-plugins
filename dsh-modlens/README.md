@@ -1,3 +1,5 @@
+> **来源与许可**：合体插件——引擎部分基于 [liustack/modlens](https://github.com/liustack/modlens)（@liustack/modlens 3.18.0，MIT），守卫部分为 dsh-modlens-guard；本地将两者合体并补齐思考回传等修复。详见仓库根目录 [README.md](../README.md) 的来源与许可总表。
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/liustack/modlens/main/assets/banner.jpg" width="100%" alt="ModLens" />
 </p>

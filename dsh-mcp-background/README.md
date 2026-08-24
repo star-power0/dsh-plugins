@@ -1,3 +1,5 @@
+> **来源**：本项目为 DeepSeek Harness 插件原创开发，许可证 MIT。
+
 # dsh-mcp-background
 
 后台 MCP 连接插件。每个 Profile patch 实例连接一个 MCP 服务，连接完成后把工具注册为 `mcp__<serverName>__<toolName>`，并在设置页提供连接、断开、重连、启用和禁用操作。

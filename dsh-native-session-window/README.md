@@ -1,3 +1,5 @@
+> **来源**：本项目为 DeepSeek Harness 插件原创开发，许可证 MIT。
+
 # dsh-native-session-window
 
 Desktop 会话窗口插件。在主窗口标题栏提供“在新窗口打开”入口，通过同一 Host 的 loopback Web Server 在新的 Electron `BrowserWindow` 中加载指定会话。
