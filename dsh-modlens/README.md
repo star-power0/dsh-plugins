@@ -1,5 +1,11 @@
 > **来源与许可**：合体插件——引擎部分基于 [liustack/modlens](https://github.com/liustack/modlens)（@liustack/modlens 3.18.0，MIT），守卫部分为 dsh-modlens-guard；本地将两者合体并补齐思考回传等修复。详见仓库根目录 [README.md](../README.md) 的来源与许可总表。
 
+**本地改动（Local modifications）**：
+- 合体结构：@liustack/modlens 引擎 + dsh-modlens-guard 守卫合并为单插件
+- 思考回传修复：委派时对齐 replaySource，保住 reasoning_content（消除严格网关 400）
+- 纯工具调用消息补 reasoning_content 占位（​）并同步 replayState.blocks
+- 引擎读图失败时对不可写 Error.message（DOMException）改用包裹方式，不再掩盖真实原因
+- 默认 visionProvider:false：引擎只贡献工具与设置卡，guard 独占请求时图片分流
 <p align="center">
   <img src="https://raw.githubusercontent.com/liustack/modlens/main/assets/banner.jpg" width="100%" alt="ModLens" />
 </p>

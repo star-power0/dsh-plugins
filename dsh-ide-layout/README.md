@@ -11,6 +11,19 @@ DSH
 └── 右侧：DSH 原生对话区（被挤压保留，原功能完整）
 ```
 
+## 本地改动（Local modifications）
+
+基于上游 v0.2.0 本地迭代至 0.4.0，主要改动：
+
+- **独立三区布局**：不依赖 `dsh-better-sidebar`，自建「左文件树 + 中编辑器/终端 + 右对话」布局控制器
+- **23 种语法高亮**：含自写的 Batch/cmd StreamParser
+- **编码选择**：状态栏切换 UTF-8 / 自动检测 / GB18030 / GBK / Big5 / UTF-16 LE / ISO-8859-1（host 侧 iconv-lite 编解码）
+- **Java / Rust LSP**：JDTLS 与 rust-analyzer 本机发现（环境变量 → 常见安装路径 → PATH），未找到自动降级纯高亮
+- **LSP 懒加载**：首次打开文件才派生语言服务器进程（不再启动即全连）
+- **LSP 资源池**：语言服务器进程上限 4 个，池满 LRU 回收最久未活动连接
+- **workspaces 可选降级**：部分 profile 不提供该服务时按会话 cwd 工作，不崩溃
+- **信任栅栏**：loopback / Host / Origin / Sec-Fetch-Site 校验 + LSP 文档 URI 门禁
+
 ## 致谢 / Credits
 
 本插件基于以下开源项目（按依赖深度排序）：

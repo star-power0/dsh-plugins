@@ -1,5 +1,8 @@
 > **来源与许可**：基于 [omdsh-dev/dsh-at-file](https://github.com/omdsh-dev/dsh-at-file) v0.6.0（MIT）开发，本地按 Registry verified commit 接入。详见仓库根目录 [README.md](../README.md) 的来源与许可总表。
 
+**本地改动（Local modifications）**：
+- 按 Registry verified 固定 commit `9c71e52`（v0.6.0）接入，源码未改
+- Web/Desktop 双端以 link 依赖 + 手工 patch 实例注册
 # dsh-at-file
 
 Workspace path references for the DeepSeek Harness web interface. Type `@` in the composer to search the current workspace and insert a file or directory path.

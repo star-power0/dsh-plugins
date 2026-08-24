@@ -1,5 +1,9 @@
 > **来源与许可**：基于 [taxueseek/dsh-files](https://github.com/taxueseek/dsh-files) v0.2.0（MIT）开发，本地仅保留回形针上传与 ead_document 能力。详见仓库根目录 [README.md](../README.md) 的来源与许可总表。
 
+**本地改动（Local modifications）**：
+- 裁剪功能：仅保留回形针文件上传与 `read_document` 文档解析
+- 退役 dsh-drag-and-drop 与 dsh-attachments（本地不再维护）
+- PPTX 解析由外部 MinerU MCP 承担
 # dsh-files
 
 DeepSeek Harness 双面插件（dual-face plugin）：一个包、一行 cordis 配置，为 Web UI 提供「文件上传」与「文档读取」两项能力。

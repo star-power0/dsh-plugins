@@ -1,5 +1,11 @@
 > **来源与许可**：基于 [omdsh-dev/dsh-genui](https://github.com/omdsh-dev/dsh-genui)（MIT）开发，本地适配 rc.6 双通道渲染与 slash 候选过滤。详见仓库根目录 [README.md](../README.md) 的来源与许可总表。
 
+**本地改动（Local modifications）**：
+- tsconfig 路径本地化（上游指向作者本机源码树，本机无法构建）
+- 原版 rc.6 宿主无 fence-registry 扩展点：补 DOM 通道渲染（MutationObserver 接管 + 结构兜底）
+- 修复 rc.6 壳上 dsh-ui 围栏静默不渲染问题
+- /panel slash 候选前缀过滤（只在输入匹配 panel 时返回候选）
+- Safari 无锚点行降级链与一次性告警
 # 🎨 dsh-genui
 
 <div align="center">

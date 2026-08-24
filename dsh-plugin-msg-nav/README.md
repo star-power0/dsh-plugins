@@ -1,5 +1,8 @@
 > **来源与许可**：基于 [SherUnlocked-4869/dsh-plugin-msg-nav](https://github.com/SherUnlocked-4869/dsh-plugin-msg-nav) 0.2.0（MIT）开发，固定该版本以获得两个未被 Registry 收录的关键修复。详见仓库根目录 [README.md](../README.md) 的来源与许可总表。
 
+**本地改动（Local modifications）**：
+- 固定 0.2.0（Registry 只收录 0.1.0，缺失两个关键修复：导航条 portal 到 body、host 会话投影）
+- 纯 JS 无构建；双端 link 接入，不进 bundles 栈
 **简体中文** | [English](./README.en.md)
 
 [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)

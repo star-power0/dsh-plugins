@@ -2,6 +2,10 @@
 
 > **来源与许可**：基于 [YELEBAI/dsh-plugin-marketplace](https://github.com/YELEBAI/dsh-plugin-marketplace) v0.9.1（MIT）的本地维护副本，固定版本、禁用自更新；本地修复了 Win32 文件夹选择 RPC。详见仓库根目录 [README.md](../README.md) 的来源与许可总表。
 
+**本地改动（Local modifications）**：
+- 固定 v0.9.1，禁用市场自更新与远程覆盖
+- Win32 文件夹选择改用 PowerShell FolderBrowserDialog（官方 native worker 在 Electron 下不可用）
+- 启用状态识别兼容 bundle 栈与 patch 层（patchManaged 标记）
 # DSH Plugin Marketplace
 
 **经过验证的 DSH 插件市场，以及自主维护的中心 Registry。**
