@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-08-24
+
+- 深色模式修复：设置页样式改用官方主题实际存在的变量（`bg-module-platform` / `border-l1` / `border-l2` / `brand-primary` / `state-error-*`），修复深色模式下浅底白字看不见的问题。
+
 ## 2026-08-22
 
 - 补充会话删除边界、持久化墓碑、入口和验证说明。

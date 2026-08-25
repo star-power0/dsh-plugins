@@ -8,22 +8,22 @@ const NS = "settings.session-manager";
 const css = {
   section: { maxWidth: 720, color: "var(--dsw-alias-label-primary, #1f2329)", fontFamily: "inherit" },
   lead: { fontSize: 13, lineHeight: 1.6, color: "var(--dsw-alias-label-tertiary, #6b7280)", margin: "0 0 16px" },
-  card: { border: "1px solid var(--dsw-alias-border-strong, #e5e7eb)", borderRadius: 8, marginBottom: 16, overflow: "hidden" },
-  cardHead: { padding: "10px 14px", fontWeight: 600, fontSize: 14, background: "var(--dsw-alias-fill-subtle, #f7f8fa)", display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between" },
+  card: { border: "1px solid var(--dsw-alias-border-l2, #e5e7eb)", borderRadius: 8, marginBottom: 16, overflow: "hidden" },
+  cardHead: { padding: "10px 14px", fontWeight: 600, fontSize: 14, background: "var(--dsw-alias-bg-module-platform, #f7f8fa)", display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between" },
   path: { fontWeight: 400, fontSize: 12, color: "var(--dsw-alias-label-tertiary, #9ca3af)" },
-  row: { display: "flex", alignItems: "center", gap: 12, padding: "8px 14px", borderTop: "1px solid var(--dsw-alias-border-subtle, #f0f1f3)" },
-  rowAlt: { background: "var(--dsw-alias-fill-subtle, #fafbfc)" },
+  row: { display: "flex", alignItems: "center", gap: 12, padding: "8px 14px", borderTop: "1px solid var(--dsw-alias-border-l1, #f0f1f3)" },
+  rowAlt: { background: "var(--dsw-alias-bg-module-platform, #fafbfc)" },
   title: { flex: "1 1 auto", fontSize: 13, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   meta: { flex: "0 0 auto", fontSize: 12, color: "var(--dsw-alias-label-tertiary, #9ca3af)", whiteSpace: "nowrap" },
-  badge: { flex: "0 0 auto", fontSize: 11, padding: "2px 8px", borderRadius: 10, background: "var(--dsw-alias-fill-subtle, #f0f1f3)", color: "var(--dsw-alias-label-secondary, #6b7280)" },
-  badgeDanger: { flex: "0 0 auto", fontSize: 11, padding: "2px 8px", borderRadius: 10, background: "rgba(220,38,38,.1)", color: "#dc2626" },
-  delete: { flex: "0 0 auto", padding: "4px 12px", borderRadius: 6, border: "1px solid rgba(220,38,38,.4)", background: "transparent", color: "#dc2626", fontSize: 12, cursor: "pointer" },
+  badge: { flex: "0 0 auto", fontSize: 11, padding: "2px 8px", borderRadius: 10, background: "var(--dsw-alias-bg-module-platform, #f0f1f3)", color: "var(--dsw-alias-label-secondary, #6b7280)" },
+  badgeDanger: { flex: "0 0 auto", fontSize: 11, padding: "2px 8px", borderRadius: 10, background: "var(--dsw-alias-state-error-tertiary, rgba(220,38,38,.1))", color: "var(--dsw-alias-state-error-primary, #dc2626)" },
+  delete: { flex: "0 0 auto", padding: "4px 12px", borderRadius: 6, border: "1px solid var(--dsw-alias-state-error-primary, rgba(220,38,38,.4))", background: "transparent", color: "var(--dsw-alias-state-error-primary, #dc2626)", fontSize: 12, cursor: "pointer" },
   deleteDisabled: { opacity: 0.4, cursor: "not-allowed" },
   empty: { padding: 12, fontSize: 13, color: "var(--dsw-alias-label-tertiary, #9ca3af)" },
   actions: { display: "flex", gap: 10, alignItems: "center", marginTop: 4 },
-  button: { padding: "6px 14px", borderRadius: 6, border: "none", background: "var(--dsw-alias-accent, #3b82f6)", color: "#fff", fontSize: 13, cursor: "pointer" },
+  button: { padding: "6px 14px", borderRadius: 6, border: "none", background: "var(--dsw-alias-brand-primary, #3b82f6)", color: "var(--dsw-alias-label-primary-inverted, #fff)", fontSize: 13, cursor: "pointer" },
   status: { fontSize: 12, color: "var(--dsw-alias-label-secondary, #4b5563)" },
-  error: { fontSize: 12, color: "#dc2626" }
+  error: { fontSize: 12, color: "var(--dsw-alias-state-error-primary, #dc2626)" }
 };
 
 function SessionGlyph({ size = 22 }) {

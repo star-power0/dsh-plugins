@@ -46,18 +46,18 @@ function matchOption(options, value) {
 const css = {
   section: { maxWidth: 720, color: "var(--dsw-alias-label-primary, #1f2329)", fontFamily: "inherit" },
   lead: { fontSize: 13, lineHeight: 1.6, color: "var(--dsw-alias-label-tertiary, #6b7280)", margin: "0 0 16px" },
-  card: { border: "1px solid var(--dsw-alias-border-strong, #e5e7eb)", borderRadius: 8, marginBottom: 16, overflow: "hidden" },
-  cardHead: { padding: "10px 14px", fontWeight: 600, fontSize: 14, background: "var(--dsw-alias-fill-subtle, #f7f8fa)", display: "flex", alignItems: "center", gap: 8 },
-  row: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 14px", padding: "8px 14px", borderTop: "1px solid var(--dsw-alias-border-subtle, #f0f1f3)" },
-  rowAlt: { background: "var(--dsw-alias-fill-subtle, #fafbfc)" },
+  card: { border: "1px solid var(--dsw-alias-border-l2, #e5e7eb)", borderRadius: 8, marginBottom: 16, overflow: "hidden" },
+  cardHead: { padding: "10px 14px", fontWeight: 600, fontSize: 14, background: "var(--dsw-alias-bg-module-platform, #f7f8fa)", display: "flex", alignItems: "center", gap: 8 },
+  row: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 14px", padding: "8px 14px", borderTop: "1px solid var(--dsw-alias-border-l1, #f0f1f3)" },
+  rowAlt: { background: "var(--dsw-alias-bg-module-platform, #fafbfc)" },
   modelId: { flex: "1 1 140px", minWidth: 120, fontSize: 13, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   field: { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--dsw-alias-label-secondary, #4b5563)" },
-  select: { padding: "4px 6px", borderRadius: 6, border: "1px solid var(--dsw-alias-border-strong, #d1d5db)", background: "var(--dsw-alias-fill, #fff)", fontSize: 12, color: "inherit", minWidth: 96, maxWidth: 140 },
-  input: { padding: "4px 6px", borderRadius: 6, border: "1px solid var(--dsw-alias-border-strong, #d1d5db)", background: "var(--dsw-alias-fill, #fff)", fontSize: 12, width: 90, color: "inherit" },
-  checkbox: { accentColor: "var(--dsw-alias-accent, #3b82f6)", margin: 0 },
+  select: { padding: "4px 6px", borderRadius: 6, border: "1px solid var(--dsw-alias-border-l2, #d1d5db)", background: "var(--dsw-specific-input-major, #fff)", fontSize: 12, color: "inherit", minWidth: 96, maxWidth: 140 },
+  input: { padding: "4px 6px", borderRadius: 6, border: "1px solid var(--dsw-alias-border-l2, #d1d5db)", background: "var(--dsw-specific-input-major, #fff)", fontSize: 12, width: 90, color: "inherit" },
+  checkbox: { accentColor: "var(--dsw-alias-brand-primary, #3b82f6)", margin: 0 },
   empty: { padding: 12, fontSize: 13, color: "var(--dsw-alias-label-tertiary, #9ca3af)" },
   actions: { display: "flex", gap: 10, alignItems: "center", marginTop: 4, flexWrap: "wrap" },
-  button: { padding: "6px 14px", borderRadius: 6, border: "none", background: "var(--dsw-alias-accent, #3b82f6)", color: "#fff", fontSize: 13, cursor: "pointer" },
+  button: { padding: "6px 14px", borderRadius: 6, border: "none", background: "var(--dsw-alias-brand-primary, #3b82f6)", color: "var(--dsw-alias-label-primary-inverted, #fff)", fontSize: 13, cursor: "pointer" },
   buttonDisabled: { opacity: 0.5, cursor: "not-allowed" },
   hint: { fontSize: 12, color: "var(--dsw-alias-label-tertiary, #9ca3af)" },
   status: { fontSize: 12, color: "var(--dsw-alias-label-secondary, #4b5563)" },
@@ -242,7 +242,7 @@ function ModelEnhancerSection(props) {
         <div key={prov.id} style={css.card}>
           <div style={css.cardHead}>
             <span>{prov.displayName}</span>
-            <span style={css.hint}>{prov.id}</span>
+            {prov.id !== prov.displayName && <span style={css.hint}>{prov.id}</span>}
           </div>
           {prov.models.length === 0 && <div style={css.empty}>{t("noModels")}</div>}
           {prov.models.map((model, i) => {
@@ -354,7 +354,7 @@ function ModelEnhancerSection(props) {
         <button type="button" style={saving ? { ...css.button, ...css.buttonDisabled } : css.button} disabled={saving} onClick={save}>
           {saving ? t("saving") : t("save")}
         </button>
-        <button type="button" style={{ ...css.button, background: "transparent", color: "var(--dsw-alias-label-secondary, #4b5563)", border: "1px solid var(--dsw-alias-border-strong, #d1d5db)" }} onClick={load}>
+        <button type="button" style={{ ...css.button, background: "transparent", color: "var(--dsw-alias-label-secondary, #4b5563)", border: "1px solid var(--dsw-alias-border-l2, #d1d5db)" }} onClick={load}>
           {t("reload")}
         </button>
         {saved && <span style={css.status}>{t("saved")}</span>}

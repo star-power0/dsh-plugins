@@ -10,21 +10,21 @@ const css = {
   heroMeta: { margin: "5px 0 0", fontSize: 13, color: "var(--dsw-alias-label-tertiary, #6b7280)" },
   lead: { fontSize: 13, lineHeight: 1.6, color: "var(--dsw-alias-label-tertiary, #6b7280)", margin: "0 0 16px" },
   summary: { display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 },
-  stat: { padding: "7px 11px", borderRadius: 10, background: "var(--dsw-alias-fill-subtle, #f7f8fa)", fontSize: 12, color: "var(--dsw-alias-label-secondary, #4b5563)" },
-  card: { border: "1px solid var(--dsw-alias-border-strong, #e5e7eb)", borderRadius: 12, marginBottom: 12, overflow: "hidden", boxShadow: "0 2px 8px rgba(31,35,41,.04)" },
-  cardHead: { display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", background: "var(--dsw-alias-fill-subtle, #f7f8fa)" },
+  stat: { padding: "7px 11px", borderRadius: 10, background: "var(--dsw-alias-bg-module-platform, #f7f8fa)", fontSize: 12, color: "var(--dsw-alias-label-secondary, #4b5563)" },
+  card: { border: "1px solid var(--dsw-alias-border-l2, #e5e7eb)", borderRadius: 12, marginBottom: 12, overflow: "hidden", boxShadow: "0 2px 8px rgba(31,35,41,.04)" },
+  cardHead: { display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", background: "var(--dsw-alias-bg-module-platform, #f7f8fa)" },
   name: { fontSize: 15, fontWeight: 650, flex: "1 1 auto" },
   transport: { fontSize: 11, color: "var(--dsw-alias-label-tertiary, #6b7280)" },
   badge: { fontSize: 11, padding: "4px 9px", borderRadius: 999, fontWeight: 600 },
   body: { padding: "12px 16px 15px" },
   info: { display: "flex", flexWrap: "wrap", gap: "8px 18px", fontSize: 12, color: "var(--dsw-alias-label-secondary, #4b5563)" },
-  tools: { margin: "12px 0 0", padding: "10px 12px", borderRadius: 8, background: "var(--dsw-alias-fill-subtle, #fafbfc)", fontSize: 12, lineHeight: 1.7, wordBreak: "break-word" },
+  tools: { margin: "12px 0 0", padding: "10px 12px", borderRadius: 8, background: "var(--dsw-alias-bg-module-platform, #fafbfc)", fontSize: 12, lineHeight: 1.7, wordBreak: "break-word" },
   actions: { display: "flex", flexWrap: "wrap", gap: 8, marginTop: 13 },
-  button: { padding: "6px 12px", borderRadius: 7, border: "1px solid var(--dsw-alias-border-strong, #d1d5db)", background: "var(--dsw-alias-fill, #fff)", color: "inherit", fontSize: 12, cursor: "pointer" },
-  primary: { background: "var(--dsw-alias-accent, #2563eb)", borderColor: "var(--dsw-alias-accent, #2563eb)", color: "#fff" },
-  danger: { color: "#dc2626", borderColor: "rgba(220,38,38,.35)" },
-  empty: { padding: 16, borderRadius: 10, background: "var(--dsw-alias-fill-subtle, #f7f8fa)", fontSize: 13, color: "var(--dsw-alias-label-tertiary, #6b7280)" },
-  error: { fontSize: 12, color: "#dc2626" },
+  button: { padding: "6px 12px", borderRadius: 7, border: "1px solid var(--dsw-alias-border-l2, #d1d5db)", background: "var(--dsw-alias-button-elevated-fill, #fff)", color: "inherit", fontSize: 12, cursor: "pointer" },
+  primary: { background: "var(--dsw-alias-brand-primary, #2563eb)", borderColor: "var(--dsw-alias-brand-primary, #2563eb)", color: "var(--dsw-alias-label-primary-inverted, #fff)" },
+  danger: { color: "var(--dsw-alias-state-error-primary, #dc2626)", borderColor: "var(--dsw-alias-state-error-primary, rgba(220,38,38,.35))" },
+  empty: { padding: 16, borderRadius: 10, background: "var(--dsw-alias-bg-module-platform, #f7f8fa)", fontSize: 13, color: "var(--dsw-alias-label-tertiary, #6b7280)" },
+  error: { fontSize: 12, color: "var(--dsw-alias-state-error-primary, #dc2626)" },
   status: { fontSize: 12, color: "var(--dsw-alias-label-secondary, #4b5563)" }
 };
 
@@ -69,7 +69,7 @@ function ManagerSection({ t }) {
       <div style={css.cardHead}><McpGlyph size={19} /><span style={css.name}>{server.serverName}</span><span style={css.transport}>{server.transport}</span><StatusBadge state={server.state} t={t} /></div>
       <div style={css.body}><div style={css.info}><span>{t("toolCount", { n: server.tools.length })}</span><span>{t("attempts", { n: server.attempts })}</span>{server.lastError && <span style={css.error} title={server.lastError}>{server.lastError}</span>}</div>
         {open && <div style={css.tools}><strong>{t("tools")}</strong>{server.tools.length ? <div>{server.tools.join(" · ")}</div> : <div>{t("noTools")}</div>}</div>}
-        <div style={css.actions}><button type="button" style={css.button} onClick={() => setExpanded((v) => ({ ...v, [server.serverName]: !open }))}>{open ? t("hideTools") : t("showTools")}</button>{server.state === "connected" ? <button type="button" style={{ ...css.button, ...css.danger }} disabled={busy !== null} onClick={() => action(server.serverName, "disconnect")}>{isBusy("disconnect") ? t("working") : t("disconnect")}</button> : <button type="button" style={{ ...css.button, ...css.primary }} disabled={busy !== null} onClick={() => action(server.serverName, server.state === "disabled" ? "enable" : "connect")}>{isBusy(server.state === "disabled" ? "enable" : "connect") ? t("working") : server.state === "disabled" ? t("enable") : t("connect")}</button>}{server.state !== "disabled" && <button type="button" style={css.button} disabled={busy !== null} onClick={() => action(server.serverName, "reconnect")}>{isBusy("reconnect") ? t("working") : t("reconnect")}</button>}{server.state === "disabled" ? <button type="button" style={css.button} disabled={busy !== null} onClick={() => action(server.serverName, "enable")}>{isBusy("enable") ? t("working") : t("enable")}</button> : <button type="button" style={css.button} disabled={busy !== null} onClick={() => action(server.serverName, "disable")}>{isBusy("disable") ? t("working") : t("disable")}</button>}</div>
+        <div style={css.actions}><button type="button" style={css.button} onClick={() => setExpanded((v) => ({ ...v, [server.serverName]: !open }))}>{open ? t("hideTools") : t("showTools")}</button>{server.state === "connected" ? <button type="button" style={{ ...css.button, ...css.danger }} disabled={busy !== null} onClick={() => action(server.serverName, "disconnect")}>{isBusy("disconnect") ? t("working") : t("disconnect")}</button> : <button type="button" style={{ ...css.button, ...css.primary }} disabled={busy !== null} onClick={() => action(server.serverName, server.state === "disabled" ? "enable" : "connect")}>{isBusy(server.state === "disabled" ? "enable" : "connect") ? t("working") : server.state === "disabled" ? t("enable") : t("connect")}</button>}{server.state !== "disabled" && <button type="button" style={css.button} disabled={busy !== null} onClick={() => action(server.serverName, "reconnect")}>{isBusy("reconnect") ? t("working") : t("reconnect")}</button>}{server.state === "disabled" ? null : <button type="button" style={css.button} disabled={busy !== null} onClick={() => action(server.serverName, "disable")}>{isBusy("disable") ? t("working") : t("disable")}</button>}</div>
       </div></div>; })}
     <div style={css.actions}><button type="button" style={css.button} onClick={load}>{t("reload")}</button></div>
   </div>;
