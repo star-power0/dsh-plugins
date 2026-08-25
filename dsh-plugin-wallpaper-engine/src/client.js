@@ -91,6 +91,11 @@ function readPersisted() {
     const o = JSON.parse(raw);
     return {
       id: typeof o.id === "string" ? o.id : "",
+      // Persisted resolved media, so the layer can mount on startup BEFORE the
+      // (async, disk-scanning) inventory refetch resolves — the wallpaper no
+      // longer has to wait for the host to rescan the WE library.
+      url: typeof o.url === "string" ? o.url : "",
+      type: o.type === "video" || o.type === "web" ? o.type : "",
       scrim: clampNum(o.scrim, 0, 1, DEFAULTS.scrim),
       border: clampNum(o.border, 0, 1, DEFAULTS.border),
       blur: clampNum(o.blur, 0, 40, DEFAULTS.blur),
@@ -108,8 +113,6 @@ function readPersisted() {
 // ── Shared selection store (React + DOM layer share it) ────────────────────
 const selection = {
   ...readPersisted(),
-  url: null,
-  type: null,
   playing: true,
   loading: false,
   rotationTimer: null,
@@ -135,6 +138,8 @@ function persistSelection() {
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify({
       id: selection.id,
+      url: selection.url || "",
+      type: selection.type || "",
       scrim: selection.scrim,
       border: selection.border,
       blur: selection.blur,
@@ -468,6 +473,32 @@ function syncLayers() {
 }
 
 // ── Effect application: push the knobs into CSS variables ───────────────────
+// Translucent-glass fills for surfaces that keep their own opaque theme
+// background (新会话 button, composer "+" selector, code blocks, goal dock,
+// menus, pills). The theme presenter writes every token inline on <body>, and
+// an inline style beats any stylesheet rule, so these are ALSO pushed inline in
+// applyEffects() — the last writer wins. Values mirror the CSS blocks below.
+const GLASS_SURFACES = {
+  light: {
+    "--dsw-alias-button-elevated-fill": "rgba(255, 255, 255, 0.55)",
+    "--dsw-specific-selector": "rgba(255, 255, 255, 0.5)",
+    "--dsw-alias-markdown-code-block": "rgba(255, 255, 255, 0.62)",
+    "--dsw-alias-markdown-inline-code": "rgba(255, 255, 255, 0.5)",
+    "--dsw-specific-tip": "rgba(255, 255, 255, 0.5)",
+    "--dsw-specific-menu": "rgba(255, 255, 255, 0.55)",
+    "--dsw-alias-bg-module-platform": "rgba(255, 255, 255, 0.5)",
+  },
+  dark: {
+    "--dsw-alias-button-elevated-fill": "rgba(16, 21, 29, 0.55)",
+    "--dsw-specific-selector": "rgba(22, 29, 40, 0.5)",
+    "--dsw-alias-markdown-code-block": "rgba(9, 13, 20, 0.6)",
+    "--dsw-alias-markdown-inline-code": "rgba(16, 21, 29, 0.5)",
+    "--dsw-specific-tip": "rgba(14, 18, 25, 0.5)",
+    "--dsw-specific-menu": "rgba(16, 21, 29, 0.55)",
+    "--dsw-alias-bg-module-platform": "rgba(16, 21, 29, 0.55)",
+  },
+};
+
 function applyEffects() {
   const s = document.body.style;
   s.setProperty("--we-scrim-color", "rgba(0,0,0," + selection.scrim + ")");
@@ -481,6 +512,22 @@ function applyEffects() {
   // Compensate for the fringe the blur reveals by scaling the layer up.
   const scale = (1 + selection.wallpaperBlur * 0.006).toFixed(4);
   s.setProperty("--we-wallpaper-scale", scale);
+
+  // Glass surfaces inline (see GLASS_SURFACES above): only while a wallpaper
+  // is active; otherwise retract them so an unloaded/closed plugin never leaks
+  // translucent fills. Written with !important priority because the theme
+  // presenter re-writes every token inline on <body> with plain priority — an
+  // inline-important value beats it no matter which one applied last.
+  const isDark = typeof document.body.hasAttribute === "function"
+    ? document.body.hasAttribute("data-ds-dark-theme")
+    : false;
+  const scheme = isDark ? "dark" : "light";
+  if (selection.url) {
+    const surfaces = GLASS_SURFACES[scheme];
+    for (const name in surfaces) s.setProperty(name, surfaces[name], "important");
+  } else {
+    for (const name in GLASS_SURFACES.light) s.removeProperty(name);
+  }
 
   // Scrim immediacy: some composited/kiosk environments do not repaint a
   // z-index:-1 layer promptly when only an inherited CSS variable changes.
@@ -504,6 +551,7 @@ function clearEffects() {
   s.removeProperty("--we-blur");
   s.removeProperty("--we-wallpaper-blur");
   s.removeProperty("--we-wallpaper-scale");
+  for (const name in GLASS_SURFACES.light) s.removeProperty(name);
   const scrim = document.getElementById(SCRIM_ID);
   if (scrim) scrim.style.background = "";
 }
@@ -884,6 +932,16 @@ const CSS = `
     --dsw-alias-label-tertiary: rgb(70, 73, 79);
     --dsw-alias-label-caption: rgb(110, 114, 120);
     --dsw-alias-label-dimmed: rgb(50, 52, 56);
+    /* Light-mode surfaces that keep their own opaque fill (buttons, code,
+       menus, pills) become translucent white glass so the wallpaper shows
+       through instead of leaving white blocks. */
+    --dsw-alias-button-elevated-fill: rgba(255, 255, 255, 0.55);
+    --dsw-specific-selector: rgba(255, 255, 255, 0.5);
+    --dsw-alias-markdown-code-block: rgba(255, 255, 255, 0.62);
+    --dsw-alias-markdown-inline-code: rgba(255, 255, 255, 0.5);
+    --dsw-specific-tip: rgba(255, 255, 255, 0.5);
+    --dsw-specific-menu: rgba(255, 255, 255, 0.55);
+    --dsw-alias-bg-module-platform: rgba(255, 255, 255, 0.5);
   }
 
   /* ── iOS liquid glass ──────────────────────────────────────────────────────
@@ -911,6 +969,17 @@ const CSS = `
   body[data-ds-dark-theme][data-we-wallpaper] {
     --dsw-specific-input-major: rgba(255, 255, 255, 0.07);
     --dsw-specific-bubble: rgba(255, 255, 255, 0.06);
+    /* Dark-mode surfaces that keep their own opaque near-black fill (新会话
+       button, composer + selector, code blocks, goal dock, menus, pills)
+       become translucent dark glass so the wallpaper glows through instead of
+       leaving black blocks. */
+    --dsw-alias-button-elevated-fill: rgba(16, 21, 29, 0.55);
+    --dsw-specific-selector: rgba(22, 29, 40, 0.5);
+    --dsw-alias-markdown-code-block: rgba(9, 13, 20, 0.6);
+    --dsw-alias-markdown-inline-code: rgba(16, 21, 29, 0.5);
+    --dsw-specific-tip: rgba(14, 18, 25, 0.5);
+    --dsw-specific-menu: rgba(16, 21, 29, 0.55);
+    --dsw-alias-bg-module-platform: rgba(16, 21, 29, 0.55);
   }
   body[data-we-wallpaper] [data-composer-card],
   body[data-we-wallpaper] [class*="_bubble"] {
@@ -920,6 +989,13 @@ const CSS = `
       inset 0 1px 0 rgba(255, 255, 255, var(--we-glass-highlight, 0.3)),
       inset 0 -1px 0 rgba(255, 255, 255, 0.05),
       0 8px 32px rgba(0, 0, 0, var(--we-glass-shadow, 0.14));
+  }
+  /* Code blocks are opaque <pre> containers; give them the same frosted glass
+     so the wallpaper melts through the code surface. Inline <code> spans are
+     left unblurred — hundreds of tiny blur layers would jank the compositor. */
+  body[data-we-wallpaper] pre {
+    -webkit-backdrop-filter: blur(var(--we-blur, 24px)) saturate(var(--we-saturate, 1.6)) brightness(1.05);
+    backdrop-filter: blur(var(--we-blur, 24px)) saturate(var(--we-saturate, 1.6)) brightness(1.05);
   }
 
   /* Picker chrome. */
@@ -973,11 +1049,23 @@ function apply(ctx) {
     ctx.effect(() => {
       const unsub = subscribe(syncLayers);
       const unsubEffects = subscribe(applyEffects);
+      // The theme presenter retracts and re-writes every token inline on <body>
+      // whenever it applies a snapshot, which would wipe the translucent-glass
+      // overrides. Watch <body>'s style attribute and re-push them after any
+      // such rewrite, so inline !important overrides always win regardless of
+      // who applied last. Reentrancy is safe: applyEffects writes the same
+      // values, so a second pass produces no mutation and the observer settles.
+      let observer = null;
+      if (typeof MutationObserver === "function") {
+        observer = new MutationObserver(() => applyEffects());
+        observer.observe(document.body, { attributes: true, attributeFilter: ["style"] });
+      }
       syncLayers();
       applyEffects();
       return () => {
         unsub();
         unsubEffects();
+        if (observer) observer.disconnect();
         clearRotationTimer();
         const node = document.getElementById(LAYER_ID);
         if (node) node.remove();
@@ -1000,6 +1088,15 @@ function apply(ctx) {
       ),
     );
   }
+
+  // 3. Mount the persisted wallpaper immediately — before the async inventory
+  //    refetch resolves — so the background never sits empty on startup (the
+  //    host rescan + media first-frame used to leave a visible gap). The
+  //    inventory reconcile below re-resolves the id and swaps media if the
+  //    stored url went stale. Both calls are idempotent, so the effect's own
+  //    initial sync is harmless duplication.
+  syncLayers();
+  applyEffects();
 
   loadInventory();
 }
