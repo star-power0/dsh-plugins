@@ -1,0 +1,172 @@
+/**
+ * Structural contracts for the DSH client-runtime surfaces this plugin
+ * touches. Deliberately NOT imported from @deepseek-ai packages: this plugin
+ * builds out-of-tree against rc-stage APIs, and a structural subset keeps the
+ * compile surface pinned to exactly what we call (the pattern proven by
+ * dsh-plugin-market). Source of truth — verify on dsh upgrades:
+ *   packages/client/runtime/src/client/contract/sessions.ts
+ *   packages/client/runtime/src/client/sessions/service.ts   (SessionSummary)
+ *   packages/client/runtime/src/client/workspaces/service.ts
+ *   packages/client/ui-slots/src/store.ts                    (SnapshotSelectorHook)
+ *   packages/client/ui-layout/src/client/index.ts            ('shell.overlay')
+ *   packages/client/ui-sidebar/src/client/contract/slots.ts  ('sidebar.footer.action')
+ * all @ deepseek-harness 0.1.0-rc.6.
+ */
+
+/** Selector hook a slot's standard props deliver (subscribes the component). */
+export type SnapshotSelectorHook<T> = <S>(sel: (state: T) => S, eq?: (a: S, b: S) => boolean) => S
+
+/** One row of the sessions list feed (subset of SessionSummary we render). */
+export interface SessionSummary {
+  readonly id: string
+  readonly title?: string
+  readonly displayTitle: string
+  readonly cwd?: string
+  readonly agentPreset?: string
+  /** Fork/subagent lineage — the free provenance edge on the map. */
+  readonly parentId?: string
+  readonly origin?: 'subagent'
+  readonly running: boolean
+  /** User interaction currently blocking this session (approval/question). */
+  readonly pendingInteraction?: unknown
+  /** Finished while not selected and not yet opened — the "done, unread" state. */
+  readonly completed?: boolean
+  readonly blank: boolean
+  readonly updatedAt: number
+}
+
+/** The useSessions standard feed (subset). */
+export interface SessionListState {
+  readonly ids: readonly string[]
+  readonly byId: Readonly<Record<string, SessionSummary>>
+  readonly current?: string
+}
+
+/** The useWorkspaces standard feed (subset of WorkspaceListState/WorkspaceView). */
+export interface WorkspaceView {
+  readonly workspaceId: string
+  readonly path: string
+  readonly title: string
+  readonly sessionIds: readonly string[]
+}
+export interface WorkspaceListState {
+  readonly items: readonly WorkspaceView[]
+  readonly recentWorkspaceId: string | undefined
+  readonly baselinesReady?: boolean
+}
+
+/** Standard props every root-scope slot component receives. */
+export interface RootSlotStandardProps {
+  useSessions: SnapshotSelectorHook<SessionListState>
+  useWorkspaces: SnapshotSelectorHook<WorkspaceListState>
+}
+
+/** Owner share of a 'sidebar.footer.action' entry. */
+export interface SidebarFooterActionOwnerProps {
+  /** Whether the sidebar renders wide content (false = 56px rail). */
+  wide: boolean
+}
+
+/** Slot registration options (subset of the register() surface we use). */
+export interface SlotEntryOptions {
+  name: string
+  id?: string
+  order?: number
+  label?: string | (() => string)
+  inject?: (...args: unknown[]) => unknown
+}
+
+/** ctx.slots — inject defers until the slot is declared; register returns a disposer. */
+export interface SlotsService {
+  inject(name: string, factory: () => (() => void) | Iterable<() => void>): void
+  register(entry: SlotEntryOptions, component: unknown): () => void
+}
+
+/** ctx.sessions (ISessions subset). */
+export interface SessionsService {
+  readonly list: {
+    getSnapshot(): SessionListState
+    subscribe(listener: () => void): () => void
+  }
+  open(id: string): void
+  clear(): void
+  fork(opts: { sessionId: string; atSeq?: number; increaseTitle?: boolean }): Promise<string>
+}
+
+/** ctx.workspaces (subset): connectWorkspace reuses-or-creates the blank session. */
+export interface WorkspacesService {
+  connectWorkspace(workspaceId: string): Promise<string>
+  startSession(workspaceId?: string): void
+}
+
+/** RPC envelopes (packages/host/apiproxy/src/api/rpc.ts): the fetch client
+ * resolves RpcResponse — the ok/value union sits under `.result`. */
+export type RpcResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: { code?: string; message?: string } }
+export interface RpcEnvelope<T> {
+  rpcId: string
+  result: RpcResult<T>
+}
+
+/** One advisory model entry / provider group (session.models / llm.models). */
+export interface ModelCatalogModel {
+  id: string
+  name: string
+  reasoning?: { efforts: { id: string; name: string }[]; defaultEffort?: string }
+}
+export interface ModelProviderGroup {
+  id: string
+  name: string
+  models: ModelCatalogModel[]
+}
+
+export interface AgentPresetEntry {
+  id: string
+  name?: string
+  description?: string
+}
+
+/**
+ * ctx.connection — the shared typed RPC client (ConnectionHandle.api subset;
+ * packages/client/connection + packages/host/apiproxy/src/fetch/client.ts).
+ */
+export interface ConnectionService {
+  api: {
+    sessions: {
+      create(payload: { workspaceId?: string; cwd?: string; sessionId?: string; agentPreset?: string }):
+      Promise<RpcEnvelope<{ sessionId: string; agentPreset?: string }>>
+      models(payload: { sessionId: string }):
+      Promise<RpcEnvelope<{ current: unknown; groups?: ModelProviderGroup[] }>>
+      selectModel(payload: { sessionId: string; provider: string; model: string; reasoningEffort?: string }):
+      Promise<RpcEnvelope<{ selected: unknown }>>
+      prompt(payload: {
+        sessionId: string
+        mode: 'queue' | 'steer'
+        content: { type: 'text'; text: string }[]
+        clientTimeZone?: string
+      }): Promise<RpcEnvelope<{ accepted: true }>>
+    }
+    workspace: {
+      create(payload: { path: string }):
+      Promise<RpcEnvelope<{ workspace: WorkspaceView; created: boolean }>>
+    }
+    llm: {
+      models(payload: Record<string, never>):
+      Promise<RpcEnvelope<{ groups: ModelProviderGroup[] }>>
+    }
+    agentPresets: {
+      list(payload: Record<string, never>):
+      Promise<RpcEnvelope<{ presets: readonly AgentPresetEntry[]; authorable: boolean; hasDocument: boolean }>>
+    }
+  }
+}
+
+/** The client cordis context surface this plugin relies on (structural). */
+export interface TalkMapClientContext {
+  slots: SlotsService
+  sessions: SessionsService
+  workspaces: WorkspacesService
+  connection: ConnectionService
+  effect(callback: () => unknown, label?: string): void
+}

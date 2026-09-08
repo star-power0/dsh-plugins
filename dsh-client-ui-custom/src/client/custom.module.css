@@ -1,0 +1,205 @@
+/* Web-surface theme overrides, gated behind html[data-dsu-active] (set by the
+   plugin JS) so a stock profile without a configured wallpaper is untouched.
+   Every value flows through --dsu-* custom properties written on <html> by
+   the plugin; the fallbacks here mirror the plugin's shipped defaults. Rules
+   deliberately out-specify the theme sheets so the plugin wins the cascade. */
+
+html[data-dsu-active='1'] body {
+  /* Wallpaper + optional tone overlay + light-theme tone-blend wash. */
+  background-image: var(--dsu-gradient, none), var(--dsu-tone, none), var(--dsu-wallpaper, none);
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+
+  /* Whole-UI font scale (--dsu-font-scale written only when ≠ 1; 1 = stock).
+     zoom scales every px-based font and layout uniformly (the UI is px, so a
+     rem/root-font approach would not reach it). */
+  zoom: var(--dsu-font-scale, 1);
+
+  /* Font overrides: --dsu-font / --dsu-code-font written by the plugin when
+     set; when unset, var() computes to invalid → the properties fall back to
+     the inherited token values, so the stock fonts are untouched. */
+  --dsw-font-family: var(--dsu-font);
+  --ds-font-family-code: var(--dsu-code-font);
+
+  /* Optional font override. */
+  font-family: var(--dsw-font-family);
+
+  /* Accent ramp derived from a single accent color. */
+  --dsw-static-deepseek-50: color-mix(in srgb, var(--dsu-accent, #4176e6) 15%, white);
+  --dsw-static-deepseek-100: color-mix(in srgb, var(--dsu-accent, #4176e6) 30%, white);
+  --dsw-static-deepseek-200: color-mix(in srgb, var(--dsu-accent, #4176e6) 45%, white);
+  --dsw-static-deepseek-300: color-mix(in srgb, var(--dsu-accent, #4176e6) 62%, white);
+  --dsw-static-deepseek-400: color-mix(in srgb, var(--dsu-accent, #4176e6) 78%, white);
+  --dsw-static-deepseek-450: color-mix(in srgb, var(--dsu-accent, #4176e6) 92%, white);
+  --dsw-static-deepseek-500: var(--dsu-accent, #4176e6);
+  --dsw-static-deepseek-600: color-mix(in srgb, var(--dsu-accent, #4176e6) 85%, black);
+  --dsw-static-deepseek-700-delete: color-mix(in srgb, var(--dsu-accent, #4176e6) 75%, black);
+  --dsw-static-deepseek-800: color-mix(in srgb, var(--dsu-accent, #4176e6) 60%, black);
+  --dsw-static-deepseek-900: color-mix(in srgb, var(--dsu-accent, #4176e6) 45%, black);
+
+  /* Brand + interactive accents follow the ramp. */
+  --dsw-alias-brand-primary: var(--dsw-static-deepseek-500);
+  --dsw-alias-brand-primary-new-colorprimary-new-color: var(--dsw-static-deepseek-450);
+  --dsw-alias-brand-text: var(--dsw-static-deepseek-600);
+  --dsw-alias-button-primary-fill: var(--dsw-alias-brand-primary);
+  --dsw-alias-button-primary-hover: var(--dsw-static-deepseek-600);
+  --dsw-alias-interactive-bg-active: color-mix(in srgb, var(--dsu-accent, #4176e6) 16%, transparent);
+  --dsw-alias-interactive-bg-hover-accent: color-mix(in srgb, var(--dsu-accent, #4176e6) 14%, transparent);
+
+  /* Translucent glass surfaces (light-theme hues). */
+  --dsw-alias-bg-base: color-mix(in srgb, var(--dsw-static-neutral-bluish-00) var(--dsu-surface-alpha, 50%), transparent);
+  --dsw-specific-sidebar-fill: color-mix(in srgb, var(--dsw-static-neutral-bluish-50) var(--dsu-sidebar-alpha, 50%), transparent);
+  --dsw-specific-input-major: color-mix(in srgb, var(--dsw-static-neutral-bluish-00) var(--dsu-input-alpha, 82%), transparent);
+  --dsw-alias-markdown-code-block: color-mix(in srgb, var(--dsw-static-deepseek-50) var(--dsu-code-alpha, 45%), transparent);
+  --dsw-alias-markdown-code-block-banner: color-mix(in srgb, var(--dsw-static-deepseek-100) calc(var(--dsu-code-alpha, 45%) + 10%), transparent);
+  --dsw-alias-markdown-inline-code: color-mix(in srgb, var(--dsw-static-deepseek-100) calc(var(--dsu-code-alpha, 45%) + 15%), transparent);
+
+  /* Text-ink overrides over the official neutral label ladder (the ladder
+     every neutral text rides: 聊天正文/会话标题 = primary, 副标题/元信息 =
+     secondary, 时间戳/弱说明 = tertiary, 最小说明 = caption, 辅助 = dimmed).
+     An unset --dsu-ink-* falls back to the exact stock ladder value, so
+     untouched steps keep the official look. */
+  --dsw-alias-label-primary: var(--dsu-ink-primary, var(--dsw-static-neutral-bluish-1000));
+  --dsw-alias-label-secondary: var(--dsu-ink-secondary, var(--dsw-static-neutral-bluish-700));
+  --dsw-alias-label-tertiary: var(--dsu-ink-tertiary, var(--dsw-static-neutral-bluish-600));
+  --dsw-alias-label-caption: var(--dsu-ink-caption, var(--dsw-static-neutral-bluish-400));
+  --dsw-alias-label-dimmed: var(--dsu-ink-dimmed, var(--dsw-static-neutral-bluish-200));
+
+  /* Optional accent scrollbar (--dsu-scrollbar: 1 or 0). */
+  --dsw-alias-scrollbar-bg-l1: color-mix(in srgb, var(--dsu-accent, #4176e6) calc(var(--dsu-scrollbar, 0) * 30%), transparent);
+  --dsw-alias-scrollbar-bg-l2: color-mix(in srgb, var(--dsu-accent, #4176e6) calc(var(--dsu-scrollbar, 0) * 30%), transparent);
+  --dsw-alias-scrollbar-hover-l1: color-mix(in srgb, var(--dsu-accent, #4176e6) calc(var(--dsu-scrollbar, 0) * 55%), transparent);
+  --dsw-alias-scrollbar-hover-l2: color-mix(in srgb, var(--dsu-accent, #4176e6) calc(var(--dsu-scrollbar, 0) * 55%), transparent);
+}
+
+/* Dark theme: scrim over the wallpaper + dark glass hues. Must out-specify
+   the rule above (html + attribute + body + dark attribute). The gradient
+   wash is kept as a layer here too, so a gradient-only theme (no wallpaper)
+   renders the same art direction in both modes — just dimmed by the scrim. */
+html[data-dsu-active='1'] body[data-ds-dark-theme] {
+  background-image:
+    linear-gradient(180deg, var(--dsu-scrim, rgb(15 17 21 / 0.22)), var(--dsu-scrim, rgb(15 17 21 / 0.22))),
+    var(--dsu-gradient, none),
+    var(--dsu-tone, none),
+    var(--dsu-wallpaper, none);
+
+  /* Optional dark-mode accent override (--dsu-dark-accent set by the plugin);
+     unset falls back to the light ramp's dark step. */
+  --dsw-alias-brand-primary: var(--dsu-dark-accent, var(--dsw-static-deepseek-400));
+  --dsw-alias-button-primary-fill: var(--dsu-dark-accent, var(--dsw-static-deepseek-400));
+  --dsw-alias-button-primary-hover: var(--dsu-dark-accent, var(--dsw-static-deepseek-400));
+  --dsw-alias-brand-text: var(--dsw-static-deepseek-300);
+
+  --dsw-alias-bg-base: color-mix(in srgb, var(--dsw-static-neutral-bluish-950) var(--dsu-dark-alpha, var(--dsu-surface-alpha, 50%)), transparent);
+  --dsw-specific-sidebar-fill: color-mix(in srgb, var(--dsw-static-neutral-bluish-950) var(--dsu-sidebar-alpha, var(--dsu-dark-alpha, 50%)), transparent);
+  --dsw-specific-input-major: color-mix(in srgb, var(--dsw-static-neutral-bluish-850) var(--dsu-input-alpha, var(--dsu-dark-alpha, 50%)), transparent);
+  --dsw-alias-markdown-code-block: color-mix(in srgb, var(--dsw-static-neutral-bluish-900) var(--dsu-code-alpha, var(--dsu-dark-alpha, 50%)), transparent);
+  --dsw-alias-markdown-code-block-banner: color-mix(in srgb, var(--dsw-static-neutral-bluish-850) calc(var(--dsu-code-alpha, var(--dsu-dark-alpha, 50%)) + 10%), transparent);
+  --dsw-alias-markdown-inline-code: color-mix(in srgb, var(--dsw-static-deepseek-900) calc(var(--dsu-code-alpha, var(--dsu-dark-alpha, 50%)) + 15%), transparent);
+
+  /* Dark-mode text-ink overrides: the dark value wins; unset chains to the
+     light ink value (explicitly set above), then to the stock dark ladder. */
+  --dsw-alias-label-primary: var(--dsu-dark-ink-primary, var(--dsu-ink-primary, var(--dsw-static-neutral-bluish-50)));
+  --dsw-alias-label-secondary: var(--dsu-dark-ink-secondary, var(--dsu-ink-secondary, var(--dsw-static-neutral-bluish-300)));
+  --dsw-alias-label-tertiary: var(--dsu-dark-ink-tertiary, var(--dsu-ink-tertiary, var(--dsw-static-neutral-bluish-400)));
+  --dsw-alias-label-caption: var(--dsu-dark-ink-caption, var(--dsu-ink-caption, var(--dsw-static-neutral-bluish-600)));
+  --dsw-alias-label-dimmed: var(--dsu-dark-ink-dimmed, var(--dsu-ink-dimmed, var(--dsw-static-neutral-bluish-750)));
+}
+
+/* Frosted glass + optional inset vignette on the app root. */
+html[data-dsu-active='1'] #root {
+  backdrop-filter: blur(var(--dsu-blur, 0px)) saturate(var(--dsu-saturate, 1.25));
+  -webkit-backdrop-filter: blur(var(--dsu-blur, 0px)) saturate(var(--dsu-saturate, 1.25));
+  box-shadow: inset 0 0 40px rgb(15 17 21 / calc(var(--dsu-vignette, 0) * 0.10));
+}
+
+/* ── Opt-in refinement knobs ────────────────────────────────────────────────
+   Each rule only takes effect when the plugin writes the corresponding
+   --dsu-* property; an unset var invalidates the declaration and the stock
+   class style wins, so the plugin changes nothing out of the box. */
+
+/* Corner radius: chat rows, inputs, dialogs and menus. */
+html[data-dsu-active='1'] [data-chat-anchor-key],
+html[data-dsu-active='1'] input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
+html[data-dsu-active='1'] textarea,
+html[data-dsu-active='1'] [role='dialog'],
+html[data-dsu-active='1'] [role='menu'] {
+  border-radius: var(--dsu-radius);
+}
+
+/* Surface shadow: dialogs and menus. */
+html[data-dsu-active='1'] [role='dialog'],
+html[data-dsu-active='1'] [role='menu'] {
+  box-shadow: var(--dsu-shadow);
+}
+
+/* Focus glow: accent ring on keyboard focus (strength scales with
+   --dsu-focus-glow, 0 = transparent = stock). */
+html[data-dsu-active='1'] input:focus-visible,
+html[data-dsu-active='1'] textarea:focus-visible,
+html[data-dsu-active='1'] button:focus-visible,
+html[data-dsu-active='1'] [role='button']:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsu-accent, #4176e6) calc(var(--dsu-focus-glow, 0) * 45%), transparent);
+}
+
+/* Settings shell polish. The :has() guard distinguishes the settings dialog
+   from ordinary alerts, menus, and plugin overlays without relying on the
+   host's generated CSS-module class names. These rules add separation only;
+   they do not alter the shell's dimensions, scrolling, or behavior. */
+html[data-dsu-active='1'] [role='dialog']:has(nav button[aria-current='true']) {
+  border: 1px solid color-mix(in srgb, var(--dsu-accent, #4176e6) 22%, var(--dsw-alias-border-l2));
+  box-shadow: 0 22px 70px rgb(0 0 0 / 0.28), inset 0 1px 0 rgb(255 255 255 / 0.08);
+}
+
+html[data-dsu-active='1'] [role='dialog']:has(nav button[aria-current='true']) > nav {
+  border-right: 1px solid color-mix(in srgb, var(--dsu-accent, #4176e6) 14%, var(--dsw-alias-border-l2));
+  background: color-mix(in srgb, var(--dsw-alias-bg-base) 70%, transparent);
+}
+
+html[data-dsu-active='1'] [role='dialog']:has(nav button[aria-current='true']) > nav button[aria-current='true'] {
+  position: relative;
+  background: color-mix(in srgb, var(--dsu-accent, #4176e6) 13%, var(--dsw-alias-bg-module-platform));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dsu-accent, #4176e6) 30%, transparent);
+}
+
+html[data-dsu-active='1'] [role='dialog']:has(nav button[aria-current='true']) > nav button[aria-current='true']::before {
+  content: '';
+  position: absolute;
+  inset: 7px auto 7px 0;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--dsu-accent, #4176e6);
+}
+
+html[data-dsu-active='1'] [role='dialog']:has(nav button[aria-current='true']) > nav button:hover:not([aria-current='true']) {
+  background: color-mix(in srgb, var(--dsu-accent, #4176e6) 7%, transparent);
+}
+
+html[data-dsu-active='1'] [role='dialog']:has(nav button[aria-current='true']) [data-slot='settings.general.item'] {
+  margin: 0 0 8px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 78%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--dsw-alias-bg-module-platform) 54%, transparent);
+}
+
+html[data-dsu-active='1'] [role='dialog']:has(nav button[aria-current='true']) [data-slot='settings.general.item']:last-child {
+  margin-bottom: 0;
+}
+
+html[data-dsu-active='1'] [role='dialog']:has(nav button[aria-current='true']) [data-slot='settings.general.item']:hover {
+  border-color: color-mix(in srgb, var(--dsu-accent, #4176e6) 20%, var(--dsw-alias-border-l2));
+  background: color-mix(in srgb, var(--dsu-accent, #4176e6) 5%, var(--dsw-alias-bg-module-platform));
+}
+
+html[data-dsu-active='1'] [role='dialog']:has(nav button[aria-current='true']) [data-slot='settings.general.item'] + [data-slot='settings.general.item'] {
+  border-top-color: color-mix(in srgb, var(--dsu-accent, #4176e6) 12%, var(--dsw-alias-border-l2));
+}
+
+html[data-dsu-active='1'] [role='dialog']:has(nav button[aria-current='true']) [data-slot='settings.general.item'] input:not([type='checkbox']):not([type='radio']),
+html[data-dsu-active='1'] [role='dialog']:has(nav button[aria-current='true']) [data-slot='settings.general.item'] select,
+html[data-dsu-active='1'] [role='dialog']:has(nav button[aria-current='true']) [data-slot='settings.general.item'] textarea {
+  border-radius: 8px;
+}

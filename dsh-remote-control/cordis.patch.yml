@@ -1,0 +1,7 @@
+# dsh-remote-control bundle patch：注册双面插件行。
+# Node 半（exports "."）跑在宿主进程：自起手机网关（node:http）+ 官方
+# webServer 上的 /remote-control/* 管理面；dsh.client 声明让浏览器半侧
+# （exports "./client"）在设置页注册「远程控制」分区。
+- insert:
+    - id: remote-control
+      name: 'dsh-remote-control'
