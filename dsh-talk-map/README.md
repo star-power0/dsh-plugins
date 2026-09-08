@@ -1,3 +1,9 @@
+> **来源与许可**：基于 [Tasihi89/dsh-talk-map](https://github.com/Tasihi89/dsh-talk-map)（MIT）开发，固定 commit `b2d36d69b65f1a6a2c76022b1226392683767b9d`（= v0.1.0）。构建产物已提交（`lib/index.js` + `client/client.js`），无需本地构建。
+
+**本地改动（Local modifications）**：
+- **卡片自动同步（local.1/local.2，2026-09-03）**：已导入工作区（`wsFrames` 有框）的会话自动上图——`turn/end` 实时触发 + 启动 backfill 补历史漏卡；门槛：非 subagent、未归档、非空白、无既有卡；位置 layoutMemory 优先否则组内网格续排。local.2 修复 backfill 阶梯摆位（误用 members.length 当槽位号致 y 复利到 63920px；改回客户端 gridIndex 语义）。仅 host 半区改动（`src/host/card-autosync.ts` + `src/index.ts` 第四层注入），重启 Host 生效
+- Web/Desktop 双端 `link:` 依赖 + 各自 `cordis.patch.yml` 唯一 `talk-map` insert；**不写入 `dsh.profile.bundles`**
+
 # dsh-talk-map · Talk Map
 
 English | [中文](README.zh.md)

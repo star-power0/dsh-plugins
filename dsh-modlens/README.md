@@ -6,6 +6,7 @@
 - 纯工具调用消息补 reasoning_content 占位（​）并同步 replayState.blocks
 - 引擎读图失败时对不可写 Error.message（DOMException）改用包裹方式，不再掩盖真实原因
 - 默认 visionProvider:false：引擎只贡献工具与设置卡，guard 独占请求时图片分流
+- 多模态隐藏读图工具（2026-09-08）：`modelDeclaresImages()` 在 `system-prompt/assemble` 过滤 `assembly.tools`，原生多模态模型收不到 `modlens_read_image`；`modlens-` 桥模型前缀短路保留；判定走未包装 resolver，不写 STATE.lastModelCheck
 
 # dsh-modlens
 
@@ -30,6 +31,7 @@ DeepSeek 与 GLM 的主力对话模型为纯文本模型，无法直接读取图
 - **视觉桥模型**：守卫增量注册 `modlens-<upstream>` 包装模型，声明 `text + image` 能力，wire 层只复制并递归转换图片后委派真实纯文本上游；原生多模态模型不包装。失败关闭（fail-closed）：任一图片读取失败、桥未就绪或结果无效即终止请求，不调用纯文本上游。
 - **思考回传兼容**：委派时对齐 replaySource，保住 `reasoning_content`，消除思考模式严格网关的 400 错误；纯工具调用消息补 reasoning_content 占位并同步 replayState.blocks。
 - **发送前准入**：官方 Host 在 agent 运行前会拒绝纯文本模型的图片；守卫仅对这两处准入点、仅在桥就绪时临时补充 `image` 能力，使请求进入 `pre-step` 完成转写，不污染模型目录。
+- **多模态隐藏读图工具（2026-09-08）**：`system-prompt/assemble` 瀑布中按当前模型能力过滤 `assembly.tools`——原生多模态模型（目录条目声明 `image` 且非 modlens 包装）收不到 `modlens_read_image`（该工具只服务于纯文本模型）；`modlens-*` 桥模型即使声明 image 也保留工具（`modelDeclaresImages` 对 `modlens-` 前缀短路放行）；纯文本 / 未知能力 / resolver 失败一律保留。判定用未包装 resolver，不受 guard 自身准入 widening 影响；assemble 每 step 重跑，切模型下一步立即生效。
 - **状态可观测**：提供 `/modlens-guard/status` 等状态接口，设置页「视觉状态」板块与对话尾部提示，全局状态四态可见。
 
 ## 目录结构
