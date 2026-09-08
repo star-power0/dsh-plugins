@@ -373,20 +373,29 @@ export function attachFluidShader(canvas: HTMLCanvasElement, params: FluidParams
   let raf = 0
   let previous = 0
   const step = 1000 / 30
+  // Backing-store resize check cadence, ms. The check reads clientWidth/
+  // clientHeight (layout), so running it every frame would force a synchronous
+  // layout 30×/s while the app streams DOM mutations. 250ms keeps resize
+  // adaptation instant-feeling at a fraction of the cost.
+  const RESIZE_CHECK_MS = 250
+  let lastResizeCheck = 0
 
   const frame = (now: number): void => {
     raf = requestAnimationFrame(frame)
     if (now - previous < step) return
     previous = now - ((now - previous) % step)
 
-    const ratio = Math.min(window.devicePixelRatio || 1, 1.5)
-    const nextWidth = Math.round(canvas.clientWidth * ratio)
-    const nextHeight = Math.round(canvas.clientHeight * ratio)
-    if (nextWidth !== width || nextHeight !== height) {
-      width = nextWidth
-      height = nextHeight
-      canvas.width = width
-      canvas.height = height
+    if (now - lastResizeCheck >= RESIZE_CHECK_MS) {
+      lastResizeCheck = now
+      const ratio = Math.min(window.devicePixelRatio || 1, 1.5)
+      const nextWidth = Math.round(canvas.clientWidth * ratio)
+      const nextHeight = Math.round(canvas.clientHeight * ratio)
+      if (nextWidth !== width || nextHeight !== height) {
+        width = nextWidth
+        height = nextHeight
+        canvas.width = width
+        canvas.height = height
+      }
     }
 
     const p = current

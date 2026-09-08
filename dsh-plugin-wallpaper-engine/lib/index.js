@@ -30,8 +30,11 @@ import {
   statSync,
   createReadStream,
   readdirSync,
+  writeFileSync,
+  mkdirSync,
+  renameSync,
 } from 'node:fs';
-import { join, resolve, normalize, basename } from 'node:path';
+import { join, resolve, normalize, basename, dirname } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 /** Steam appid for Wallpaper Engine. */
@@ -47,9 +50,15 @@ const STEAM_PROBE_DIRS = [
   'E:\\SteamLibrary',
 ];
 
-/** Steam root recorded by the Windows installer; the probe list misses custom dirs. */
+/** Steam root recorded by the Windows installer; the probe list misses custom dirs.
+ *  Memoized per process: the registry value cannot meaningfully change while the
+ *  Host runs, and every inventory request would otherwise spawn reg.exe twice
+ *  synchronously (locateWallpaperEngine + owningLibraries), blocking the event
+ *  loop each time. */
+let memoizedSteamPath;
 function steamPathFromRegistry() {
   if (process.platform !== 'win32') return null;
+  if (memoizedSteamPath !== undefined) return memoizedSteamPath;
   try {
     const reg = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'reg.exe');
     const out = execFileSync(
@@ -58,8 +67,11 @@ function steamPathFromRegistry() {
       { encoding: 'utf8', windowsHide: true, timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] },
     );
     const m = /SteamPath\s+REG_SZ\s+(.+)/i.exec(out);
-    return m ? normalize(m[1].trim()) : null;
-  } catch { return null; }
+    memoizedSteamPath = m ? normalize(m[1].trim()) : null;
+  } catch {
+    memoizedSteamPath = null;
+  }
+  return memoizedSteamPath;
 }
 
 /** Probe list with the registered Steam root first, when it is known. */
@@ -264,7 +276,7 @@ function mimeFor(absPath) {
  */
 export const inject = ['webServer'];
 
-export function apply(ctx) {
+export function apply(ctx, config = {}) {
   const webServer = ctx.webServer;
   if (!webServer || typeof webServer.register !== 'function') {
     return () => {}; // defensive: never expected in practice
@@ -353,9 +365,19 @@ export function apply(ctx) {
     if (!absPath || !existsSync(absPath)) {
       res.statusCode = 404; res.end('not found'); return;
     }
-    const st = statSync(absPath);
+    let st;
+    try { st = statSync(absPath); } catch { res.statusCode = 404; res.end('not found'); return; }
     res.setHeader('Content-Type', mimeFor(absPath));
     res.setHeader('Accept-Ranges', 'bytes');
+    // Stream lifecycle: an aborted client (tab switch, seek, cancel) must not
+    // leak the underlying file handle, and a failed open (e.g. EMFILE) must not
+    // surface as an uncaught exception and crash the Host process.
+    const stream = (start, end) => {
+      const rs = createReadStream(absPath, { start, end });
+      rs.on('error', () => { try { res.destroy(); } catch { /* ignore */ } });
+      res.on('close', () => { rs.destroy(); });
+      rs.pipe(res);
+    };
     const range = req.headers.range;
     if (range) {
       const m = /bytes=(\d*)-(\d*)/.exec(range);
@@ -371,11 +393,11 @@ export function apply(ctx) {
       res.statusCode = 206;
       res.setHeader('Content-Range', `bytes ${start}-${end}/${st.size}`);
       res.setHeader('Content-Length', String(end - start + 1));
-      createReadStream(absPath, { start, end }).pipe(res);
+      stream(start, end);
       return;
     }
     res.setHeader('Content-Length', String(st.size));
-    createReadStream(absPath).pipe(res);
+    stream();
   }
 
   for (const seg of ['media', 'preview']) {
@@ -387,6 +409,124 @@ export function apply(ctx) {
         const pathname = new URL(req.url || '/', 'http://x').pathname;
         const token = decodeURIComponent(pathname.slice(prefix.length));
         serveFile(mediaMap.get(token), req, res);
+      },
+    }));
+  }
+
+  // 4. Durable selection state. The browser half's localStorage is
+  //    origin-scoped and the Host binds a fresh random loopback port on every
+  //    boot, so the persisted wallpaper choice would otherwise reset on every
+  //    restart. The client seeds from here at boot (synchronous GET, before
+  //    the layer mounts) and POSTs debounced updates. The file — not
+  //    localStorage — is the durable truth.
+  const stateRoot = (config && typeof config.root === 'string' && config.root)
+    ? config.root
+    : (process.env.DSH_HOME || '');
+  if (stateRoot) {
+    const STATE_MAX_BYTES = 4 * 1024 * 1024; // selection JSON is a few KB
+    const stateFile = join(stateRoot, 'storages', 'wallpaper_engine_state.json');
+    mkdirSync(dirname(stateFile), { recursive: true });
+    const readState = () => {
+      try { return readFileSync(stateFile, 'utf8'); } catch { return null; }
+    };
+    const writeState = (text) => {
+      const tmp = `${stateFile}.${process.pid}.tmp`;
+      writeFileSync(tmp, text);
+      renameSync(tmp, stateFile);
+    };
+    disposers.push(webServer.register({
+      kind: 'exact',
+      path: `${BASE}/state`,
+      handler: (req, res) => {
+        if (req.method === 'GET') {
+          const text = readState();
+          if (text === null) { res.statusCode = 404; res.end(); return; }
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(text);
+          return;
+        }
+        if (req.method === 'POST') {
+          const chunks = [];
+          let size = 0;
+          let overflow = false;
+          req.on('data', (chunk) => {
+            size += chunk.length;
+            if (size > STATE_MAX_BYTES) { overflow = true; chunks.length = 0; return; }
+            chunks.push(chunk);
+          });
+          req.on('end', () => {
+            try {
+              if (overflow) { res.statusCode = 413; res.end('too large'); return; }
+              const data = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+              if (!data || typeof data !== 'object' || !data.keys || typeof data.keys !== 'object') {
+                throw new Error('bad payload');
+              }
+              writeState(JSON.stringify(data));
+              res.statusCode = 204;
+              res.end();
+            } catch {
+              res.statusCode = 400;
+              res.end('bad request');
+            }
+          });
+          req.on('error', () => { try { res.statusCode = 400; res.end(); } catch { /* ignore */ } });
+          return;
+        }
+        res.statusCode = 405;
+        res.end();
+      },
+    }));
+
+    // 4b. Startup consistency diagnostics. The client watchdog POSTs a small
+    //     JSON snapshot whenever it finds the inline glass overrides in a
+    //     contradictory state (light scheme values while the dark attribute is
+    //     set, or missing we-* variables). Rows are appended to a JSONL file —
+    //     CSS variable names/values, booleans and timestamps only, nothing
+    //     sensitive — and the file is capped so it can never grow unbounded.
+    const diagFile = join(stateRoot, 'storages', 'wallpaper_engine_diag.jsonl');
+    const DIAG_MAX_ROW_BYTES = 16 * 1024;
+    const DIAG_MAX_FILE_BYTES = 256 * 1024;
+    const appendDiag = (rowText) => {
+      try {
+        let text = '';
+        try { text = readFileSync(diagFile, 'utf8'); } catch { text = ''; }
+        let next = text ? `${text.replace(/\n+$/, '')}\n${rowText}\n` : `${rowText}\n`;
+        if (Buffer.byteLength(next) > DIAG_MAX_FILE_BYTES) {
+          const lines = next.split('\n').filter(Boolean);
+          while (lines.length > 1 && Buffer.byteLength(lines.join('\n')) > DIAG_MAX_FILE_BYTES / 2) lines.shift();
+          next = `${lines.join('\n')}\n`;
+        }
+        writeFileSync(diagFile, next);
+      } catch { /* diagnostics must never break the host */ }
+    };
+    disposers.push(webServer.register({
+      kind: 'exact',
+      path: `${BASE}/diag`,
+      handler: (req, res) => {
+        if (req.method !== 'POST') { res.statusCode = 405; res.end(); return; }
+        const chunks = [];
+        let size = 0;
+        let overflow = false;
+        req.on('data', (chunk) => {
+          size += chunk.length;
+          if (size > DIAG_MAX_ROW_BYTES) { overflow = true; chunks.length = 0; return; }
+          chunks.push(chunk);
+        });
+        req.on('end', () => {
+          try {
+            if (overflow) { res.statusCode = 413; res.end('too large'); return; }
+            const data = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+            if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('bad payload');
+            appendDiag(JSON.stringify({ receivedAt: new Date().toISOString(), ...data }));
+            res.statusCode = 204;
+            res.end();
+          } catch {
+            res.statusCode = 400;
+            res.end('bad request');
+          }
+        });
+        req.on('error', () => { try { res.statusCode = 400; res.end(); } catch { /* ignore */ } });
       },
     }));
   }

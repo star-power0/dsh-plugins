@@ -73,11 +73,30 @@ function stampAll(): void {
 
 /**
  * Stamp the seams once, then keep them stamped as React remounts nodes.
+ * Mutation bursts are coalesced to one stamp pass per frame: the observer
+ * rides the whole document tree, so without the rAF merge a streaming
+ * response (a mutation per rendered token) would run every selector scan
+ * dozens of times per second. Stamps land at most one frame late, which is
+ * invisible (the seams gate CSS that fades in with the layer anyway).
  * @returns a disposer that disconnects the observer.
  */
 export function startSeamStamper(): () => void {
   stampAll()
-  const observer = new MutationObserver(() => { stampAll() })
+  let scheduled = false
+  let raf = 0
+  const observer = new MutationObserver(() => {
+    if (scheduled) return
+    scheduled = true
+    raf = requestAnimationFrame(() => {
+      scheduled = false
+      raf = 0
+      stampAll()
+    })
+  })
   observer.observe(document.documentElement, { childList: true, subtree: true })
-  return () => { observer.disconnect() }
+  return () => {
+    observer.disconnect()
+    if (raf !== 0) cancelAnimationFrame(raf)
+    scheduled = false
+  }
 }

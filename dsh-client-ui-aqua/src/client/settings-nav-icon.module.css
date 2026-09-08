@@ -4,8 +4,14 @@
   display: none;
 }
 
-[data-dsh-aqua-settings-nav]::before {
+/* Painted through ::after with order:-1, NOT ::before: the shell's active nav
+   cell (dsh-client-ui-custom) claims ::before for its absolutely positioned
+   3px accent bar with higher specificity. Sharing ::before let the selected
+   state overwrite this glyph, collapsing the icon box and pulling the label
+   left. ::after keeps both, and order:-1 restores the icon slot. */
+[data-dsh-aqua-settings-nav]::after {
   content: '';
+  order: -1;
   flex: none;
   width: 16px;
   height: 16px;

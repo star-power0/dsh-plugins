@@ -209,6 +209,7 @@ function readEnabled(): boolean {
 function writeEnabled(value: boolean): void {
   try {
     localStorage.setItem(AQUA_ENABLED_KEY, String(value))
+    scheduleHostSync()
   } catch {
     /* in-memory state still applies for this tab */
   }
@@ -318,6 +319,7 @@ function readSetting(key: NumericKey): number {
 function writeSetting(key: NumericKey, value: number): void {
   try {
     localStorage.setItem(NUMERIC_KEYS[key], String(value))
+    scheduleHostSync()
   } catch {
     /* in-memory state still applies for this tab */
   }
@@ -336,6 +338,7 @@ function readBackground(): 'fluid' | 'wallpaper' {
 function writeBackground(value: 'fluid' | 'wallpaper'): void {
   try {
     localStorage.setItem(BACKGROUND_KEY, value)
+    scheduleHostSync()
   } catch {
     /* in-memory state still applies */
   }
@@ -357,6 +360,7 @@ function readMode(): 'mica' | 'compat' {
 function writeMode(value: 'mica' | 'compat'): void {
   try {
     localStorage.setItem(MODE_KEY, value)
+    scheduleHostSync()
   } catch {
     /* in-memory state still applies */
   }
@@ -375,6 +379,7 @@ function readWallpaper(): string {
 function writeWallpaper(value: string): void {
   try {
     localStorage.setItem(WALLPAPER_KEY, value)
+    scheduleHostSync()
   } catch {
     /* in-memory state still applies for this tab */
   }
@@ -394,6 +399,7 @@ function readWhale(): boolean {
 function writeWhale(value: boolean): void {
   try {
     localStorage.setItem(WHALE_KEY, String(value))
+    scheduleHostSync()
   } catch {
     /* in-memory state still applies for this tab */
   }
@@ -413,6 +419,7 @@ function readCritters(): boolean {
 function writeCritters(value: boolean): void {
   try {
     localStorage.setItem(CRITTERS_KEY, String(value))
+    scheduleHostSync()
   } catch {
     /* in-memory state still applies for this tab */
   }
@@ -432,6 +439,7 @@ function readMesh(): boolean {
 function writeMesh(value: boolean): void {
   try {
     localStorage.setItem(MESH_KEY, String(value))
+    scheduleHostSync()
   } catch {
     /* in-memory state still applies for this tab */
   }
@@ -451,6 +459,7 @@ function readSpotlight(): boolean {
 function writeSpotlight(value: boolean): void {
   try {
     localStorage.setItem(SPOTLIGHT_KEY, String(value))
+    scheduleHostSync()
   } catch {
     /* in-memory state still applies for this tab */
   }
@@ -473,8 +482,122 @@ function readPress(): boolean {
 function writePress(value: boolean): void {
   try {
     localStorage.setItem(PRESS_KEY, String(value))
+    scheduleHostSync()
   } catch {
     /* in-memory state still applies for this tab */
+  }
+}
+
+// ── Host-backed state persistence ────────────────────────────────────────────
+// The durable truth of the skin state lives on the Host
+// (`storages/ui_aqua_state.json`, served at GET/POST /ui-aqua/state):
+// localStorage is origin-scoped, and the Host binds a fresh random loopback
+// port on every boot, so a port change would otherwise reset every knob to
+// its shipped default. The seed runs once at module evaluation —
+// synchronously, BEFORE the layer constructor reads localStorage — so the
+// very first mount already uses the persisted state (no wrong-default
+// flash). Write-backs are debounced and fail open to localStorage-only
+// behavior when the host route is unavailable.
+
+const HOST_STATE_URL = '/ui-aqua/state'
+const HOST_KEY_PREFIX = 'dsh.ui-aqua.'
+
+/**
+ * One-shot synchronous seed: copy the host's persisted `dsh.ui-aqua.*` keys
+ * into localStorage. Returns true when the host answered with a state file.
+ */
+export function seedFromHost(): boolean {
+  try {
+    const request = new XMLHttpRequest()
+    request.open('GET', HOST_STATE_URL, false)
+    request.send(null)
+    if (request.status !== 200) return false
+    const data = JSON.parse(request.responseText) as { keys?: Record<string, unknown> }
+    const keys = data && typeof data === 'object' ? data.keys : undefined
+    if (!keys || typeof keys !== 'object') return false
+    for (const [key, value] of Object.entries(keys)) {
+      if (!key.startsWith(HOST_KEY_PREFIX) || typeof value !== 'string') continue
+      try {
+        localStorage.setItem(key, value)
+      } catch {
+        /* quota — this key keeps its local/default value */
+      }
+    }
+    return true
+  } catch {
+    /* host unreachable or route absent — fall back to localStorage as-is */
+    return false
+  }
+}
+
+/** Collect every `dsh.ui-aqua.*` entry from localStorage. */
+function collectHostKeys(): Record<string, string> {
+  const keys: Record<string, string> = {}
+  for (let index = 0; index < localStorage.length; index++) {
+    const key = localStorage.key(index)
+    if (key === null || !key.startsWith(HOST_KEY_PREFIX)) continue
+    const value = localStorage.getItem(key)
+    if (value !== null) keys[key] = value
+  }
+  return keys
+}
+
+/** POST the collected keys to the host store (best effort). */
+function postHostState(keys: Record<string, string>, keepalive: boolean): void {
+  try {
+    void fetch(HOST_STATE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keys }),
+      keepalive,
+    }).catch(() => { /* best effort — the next change retries */ })
+  } catch {
+    /* fetch unavailable — nothing to do */
+  }
+}
+
+let hostSyncTimer: ReturnType<typeof setTimeout> | undefined
+
+/** Debounced write-back; call after every localStorage mutation. */
+export function scheduleHostSync(): void {
+  if (typeof setTimeout !== 'function' || typeof clearTimeout !== 'function') return
+  if (hostSyncTimer !== undefined) clearTimeout(hostSyncTimer)
+  hostSyncTimer = setTimeout(() => {
+    hostSyncTimer = undefined
+    try {
+      postHostState(collectHostKeys(), false)
+    } catch {
+      /* localStorage unavailable — nothing to persist */
+    }
+  }, 400)
+}
+
+/** Immediate write-back for page dismissal (64KB keepalive cap applies).
+ *  Flushes only when an unsaved change is pending: an idle page must not
+ *  re-POST its (possibly stale) localStorage on unload, or it would clobber
+ *  a newer state written by another window since this page booted. */
+export function flushHostSync(): void {
+  if (hostSyncTimer === undefined) return
+  if (typeof clearTimeout === 'function') clearTimeout(hostSyncTimer)
+  hostSyncTimer = undefined
+  try {
+    postHostState(collectHostKeys(), true)
+  } catch {
+    /* nothing to persist */
+  }
+}
+
+/**
+ * Baseline migration: schedule a write-back only when this origin's
+ * localStorage actually carries `dsh.ui-aqua.*` state, so a fresh profile
+ * cannot seed the host store with empty defaults and clobber a
+ * state-bearing origin that has not migrated yet.
+ */
+export function scheduleBaselineSync(): void {
+  try {
+    if (Object.keys(collectHostKeys()).length > 0) scheduleHostSync()
+  } catch {
+    /* localStorage unavailable */
   }
 }
 

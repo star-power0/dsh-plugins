@@ -13,7 +13,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import { AquaSettingsPage, type AquaSettingsPageInjected } from './AquaSettingsPage.tsx'
 import { createAquaRowStore, type AquaSettingsPayload } from './settings-store.ts'
 import { en, NS, zh } from './locales.ts'
-import { AquaLayer } from './theme-layer.ts'
+import { AquaLayer, flushHostSync, scheduleBaselineSync, seedFromHost } from './theme-layer.ts'
 import { registerAquaSettingsNavIcon } from './settings-nav-icon.ts'
 // Side-effect imports: the theme-layer stylesheet (unloaded with the plugin),
 // the custom Aqua settings glyph, and the self-hosted Space Grotesk @font-face.
@@ -23,6 +23,19 @@ import './fonts.module.css'
 
 /** Required services: theme override stack plus the settings section. */
 export const inject = ['theme', 'slots', 'locale']
+
+// Host-backed state seed (see theme-layer.ts): must run at module evaluation,
+// BEFORE the runtime calls apply() and the layer constructor reads
+// localStorage, so the very first mount already uses the persisted state.
+// When the host has no state file yet, migrate this origin's localStorage up
+// — but only if it actually carries state (scheduleBaselineSync), so a fresh
+// profile cannot seed the store with empty defaults. The pagehide flush
+// covers "flip the switch and close".
+const seededFromHost = seedFromHost()
+if (!seededFromHost) scheduleBaselineSync()
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener('pagehide', flushHostSync)
+}
 
 /**
  * Client plugin body.

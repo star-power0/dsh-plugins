@@ -113,21 +113,34 @@ export function ensureGlow(spot: HTMLElement): HTMLElement {
 
 /**
  * One shared observer + resize feed: keeps the glow divs glued to the panes
- * through React re-renders and notifies the caller of DOM/layout changes
- * (the caller coalesces the callbacks).
+ * through React re-renders and notifies the caller of DOM/layout changes.
+ * Mutation bursts are coalesced to one tick per frame (the observer rides the
+ * whole document tree; without the merge a streaming response would re-scan
+ * and re-notify on every rendered token). The caller's callback is expected
+ * to stay cheap and do its own further coalescing.
  * @returns a disposer that removes every injected glow div.
  */
 export function startOverlayKeeper(onChange: () => void): () => void {
+  let scheduled = false
+  let raf = 0
   const tick = (): void => {
+    scheduled = false
     for (const spot of spotElements()) ensureGlow(spot)
     onChange()
   }
+  const schedule = (): void => {
+    if (scheduled) return
+    scheduled = true
+    raf = requestAnimationFrame(tick)
+  }
   tick()
-  const observer = new MutationObserver(tick)
+  const observer = new MutationObserver(schedule)
   observer.observe(document.documentElement, { childList: true, subtree: true })
   window.addEventListener('resize', tick, { passive: true })
   return () => {
     observer.disconnect()
+    if (raf !== 0) cancelAnimationFrame(raf)
+    scheduled = false
     window.removeEventListener('resize', tick)
     for (const glow of document.querySelectorAll(`[${GLOW_ATTR}]`)) glow.remove()
   }

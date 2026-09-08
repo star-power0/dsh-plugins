@@ -1015,6 +1015,39 @@ html[data-dsh-float][data-dsh-aqua-wallpaper][data-dsh-aqua-media='video'] body[
   backdrop-filter: blur(12px);
 }
 
+/* ---------- Popup readability fix (model picker / access mode / slash
+   commands). Stock glass fills (45-55% alpha) let the wallpaper/fluid bleed
+   through behind plain text; these three popups get a near-opaque frosted
+   fill. Anchors use CSS-module LOCAL names (modelList / sideTop / menu),
+   which survive rebuilds — never the hashed prefix. The model-picker dialog
+   is matched only through its role="menu" list: the settings page reuses the
+   same `_modelList` local class WITHOUT a menu role, so a bare `[class*=
+   '_modelList']` anchor would glass over the settings editor cards too. ---------- */
+[data-dsh-aqua] :is(
+  [role='dialog']:has([role='menu'][class*='_modelList']),
+  [role='menu'][class*='_modelList'],
+  [role='menu'][class*='_sideTop_'],
+  [role='listbox'][class*='_menu']
+) {
+  background: rgb(255 255 255 / 0.94) !important;
+  backdrop-filter: blur(24px) saturate(1.4) !important;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.6),
+    0 12px 32px rgb(0 0 0 / 0.16) !important;
+}
+
+[data-dsh-aqua] body[data-ds-dark-theme] :is(
+  [role='dialog']:has([role='menu'][class*='_modelList']),
+  [role='menu'][class*='_modelList'],
+  [role='menu'][class*='_sideTop_'],
+  [role='listbox'][class*='_menu']
+) {
+  background: rgb(22 26 34 / 0.94) !important;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.08),
+    0 12px 32px rgb(0 0 0 / 0.5) !important;
+}
+
 /* ---------- Reduced motion: keep the static look, drop every effect. ---------- */
 @media (prefers-reduced-motion: reduce) {
   [data-dsh-float] [data-phase='hero'],

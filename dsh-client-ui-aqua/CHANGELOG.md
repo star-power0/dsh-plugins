@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-09-01 - 修复「玻璃主题」设置导航项选中时图标消失
+
+- 起因：设置页左侧导航里，「玻璃主题」被选中时图标不见、文字左移一格，其他分区正常。
+- 根因：Aqua 的水滴图标画在 `[data-dsh-aqua-settings-nav]::before` 上；而 `dsh-client-ui-custom` 给选中态 `nav button[aria-current='true']::before` 画 3px 强调条，选择器特异性更高（`html[data-dsu-active='1'] [role='dialog']:has(...)`），选中瞬间同一个伪元素被改成绝对定位的细条，图标盒随之塌陷，label 顶到图标位。其他分区图标是真实 `<svg>` 子元素，不占伪元素，所以不受影响。
+- 修复：`settings-nav-icon.module.css` 改用 `::after` + `order: -1` 绘制图标，让出 `::before` 给宿主强调条；两者共存，图标位与其他分区一致。
+- 验证：`node build.mjs` 通过（`lib/client.js` 783,561 bytes），产物中确认 `[data-dsh-aqua-settings-nav]::after` 规则已生成；`plugin-safety check` 19 插件双端全绿；Desktop 实测选中态图标与其他分区一致（丞相确认）。
+
+## 2026-08-28 - 常驻主线程开销优化（功能不变）
+
+- 纯性能梳理，无任何视觉/行为变化。起因：Desktop 不再黑屏后仍感知「有点卡」，定位到三处随 DOM 突变/渲染帧常驻的主线程开销。
+- `seam-stamper.ts`：全文档 `MutationObserver` 回调原本对**每个**突变批次同步执行 13 个选择器扫描（含两个昂贵的 `:has()`），流式输出期间每秒触发数十次；现在 rAF 合批为每帧最多一次，落章最多延迟一帧（seam 只做 CSS 钩子、随图层淡入，无感知）。
+- `spot-core.ts` overlay keeper：同样全文档观察，同样 rAF 合批；glow 补挂与 onChange 通知每帧最多一次（spotlight 自身的 refresh 本就有 rAF 合并，叠加无害）。
+- `whale.ts`：`positionHost()` 原本每帧（30fps）对 `[data-phase]` 读 `getBoundingClientRect`，流式渲染期间等于每秒 30 次强制同步排版；改为 200ms 节流（宿主盒只在 resize/侧栏折叠时移动，视觉无差；初始挂载与 `resize()` 路径仍即时）。
+- `fluid-shader.ts`：每帧的 `clientWidth/Height` 背板尺寸检查改为 250ms 节流（resize/DPR 适配仍然即时）。
+- 有意不动：`seedFromHost()` 模块求值期同步 XHR——同源回环毫秒级，换异步会引入「首挂读到错误默认值」的闪烁，属功能取舍；两个低频动画模块（mesh 已有 idle-pause、critters 纯 CSS）本就健康。
+- 验证：`node build.mjs` 全绿（`lib/client.js` 778,966 bytes）；`plugin-safety check` 全绿（18 插件双端一致）。
+
+## 2026-08-28 - 皮肤状态 Host 侧持久化
+
+- 起因：localStorage 按 origin（含端口）隔离 + DSH Host 每次启动随机 loopback 端口，Desktop 重启即状态清零，Aqua 缺省「开」每次自动回来。
+- host `lib/index.js`：空 apply → 注册 `GET/POST /ui-aqua/state`（`inject: ['webServer']`，`apply(ctx, config)` 读 `config.root`，原子写 `storages/ui_aqua_state.json`，POST 12MB 上限、坏载荷 400、超限 413）。
+- client `theme-layer.ts`：`seedFromHost()` 模块求值期同步种子（早于 AquaLayer 构造读 localStorage，零闪烁）；10 个 write 函数挂 `scheduleHostSync()` 400ms 防抖回写；`flushHostSync()` 仅在有未保存变更时随 pagehide 冲刷（防陈旧标签页覆盖存档）；`scheduleBaselineSync()` 仅本地确有状态才回写基线（防新空 profile 抢先建档）。
+- client `index.ts`：模块顶部种子 + pagehide 注册。
+- 已知限制：IndexedDB 视频壁纸 blob 仍按 origin 隔离，跨端口恢复不了 blob 本体（仅 `idb:` 标记），视频壁纸需重选。
+- 验证：build + plugin-safety check 全绿；web 实例路由往返（404/204/200/400）；无头 Chrome 实测新 origin 种子生效（enabled=false 不挂玻璃层）。
+
 ## 2026-08-21 - 窄对话栏控件图标化
 
 - 参考 VS Code 的窄面板行为：对话栏收窄到 560px 以下时，权限模式和模型选择器隐藏文字、思考档位与下拉箭头，只保留可点击图标；附件和发送按钮保持独立可用。

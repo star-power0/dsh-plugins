@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-08-29 - 设置页视觉层次优化（功能不变）
+
+- 优化 provider/model 卡片、行间距、控件边界和保存操作区的层次感。
+- 仅调整现有内联样式，未改变模型配置读写、RPC、图片输入或视觉桥逻辑。
+
 ## 2026-08-24
 
 - 深色模式修复：设置页样式改用官方主题实际存在的变量（`bg-module-platform` / `border-l1` / `border-l2` / `specific-input-major` / `brand-primary`），修复深色模式下浅底白字看不见的问题。

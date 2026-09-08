@@ -31,6 +31,82 @@ window.__ModuleLoader__.load({
 		  rotationSeeded: false,
 		};
 
+		// ── Host-backed state persistence ────────────────────────────────────────────
+		// localStorage is origin-scoped and the Host binds a fresh random loopback
+		// port on every boot, so a port change would drop the wallpaper choice. The
+		// durable truth lives on the host (`storages/wallpaper_engine_state.json`,
+		// GET/POST /wallpaper-engine/state): a one-shot SYNCHRONOUS seed runs before
+		// the selection store initializes below, and every persistSelection()
+		// schedules a debounced write-back. Failures fall open to localStorage-only
+		// behavior when the host route is unavailable.
+		const STATE_URL = "/wallpaper-engine/state";
+		const DIAG_URL = "/wallpaper-engine/diag";
+		const KEY_PREFIX = "dsh-wallpaper-engine";
+
+		function collectStateKeys() {
+		  const keys = {};
+		  for (let i = 0; i < localStorage.length; i++) {
+		    const key = localStorage.key(i);
+		    if (key === null || !key.startsWith(KEY_PREFIX)) continue;
+		    const value = localStorage.getItem(key);
+		    if (value !== null) keys[key] = value;
+		  }
+		  return keys;
+		}
+
+		function postState(keys, keepalive) {
+		  try {
+		    void fetch(STATE_URL, {
+		      method: "POST",
+		      headers: { "Content-Type": "application/json" },
+		      body: JSON.stringify({ keys }),
+		      keepalive,
+		    }).catch(() => {}); // best effort — the next change retries
+		  } catch { /* fetch unavailable */ }
+		}
+
+		let stateTimer = null;
+		function scheduleStateSync() {
+		  if (typeof setTimeout !== "function" || typeof clearTimeout !== "function") return;
+		  if (stateTimer !== null) clearTimeout(stateTimer);
+		  stateTimer = setTimeout(() => {
+		    stateTimer = null;
+		    try { postState(collectStateKeys(), false); } catch { /* ignore */ }
+		  }, 400);
+		}
+
+		function flushStateSync() {
+		  // Flush only when an unsaved change is pending: an idle page must not
+		  // re-POST its (possibly stale) localStorage on unload, or it would clobber
+		  // a newer state written by another window since this page booted.
+		  if (stateTimer === null) return;
+		  if (typeof clearTimeout === "function") clearTimeout(stateTimer);
+		  stateTimer = null;
+		  try { postState(collectStateKeys(), true); } catch { /* ignore */ }
+		}
+
+		// One-shot seed: synchronous on purpose — it must finish before readPersisted()
+		// below builds the selection store, so the very first layer mount already
+		// uses the persisted wallpaper choice (no blank-background gap).
+		(function seedStateFromHost() {
+		  try {
+		    const req = new XMLHttpRequest();
+		    req.open("GET", STATE_URL, false);
+		    req.send(null);
+		    if (req.status !== 200) return;
+		    const data = JSON.parse(req.responseText);
+		    const keys = data && typeof data === "object" ? data.keys : null;
+		    if (!keys || typeof keys !== "object") return;
+		    for (const [key, value] of Object.entries(keys)) {
+		      if (!key.startsWith(KEY_PREFIX) || typeof value !== "string") continue;
+		      try { localStorage.setItem(key, value); } catch { /* quota */ }
+		    }
+		  } catch { /* host unreachable / route absent — keep localStorage as-is */ }
+		})();
+		if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+		  window.addEventListener("pagehide", flushStateSync);
+		}
+
 		// ── Persisted selection ─────────────────────────────────────────────────────
 		function clampNum(v, lo, hi, fallback) {
 		  return typeof v === "number" && v >= lo && v <= hi ? v : fallback;
@@ -99,6 +175,14 @@ window.__ModuleLoader__.load({
 		  loaded: false,
 		};
 
+		// Baseline write-back: only when this origin's localStorage actually carries
+		// state, so a fresh profile cannot seed the store with empty defaults and
+		// clobber a state-bearing origin that has not migrated yet.
+		try {
+		  const baselineKeys = collectStateKeys();
+		  if (Object.keys(baselineKeys).length > 0) postState(baselineKeys, false);
+		} catch { /* ignore */ }
+
 		const listeners = new Set();
 		function emit() { for (const fn of [...listeners]) fn(); }
 		function subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); }
@@ -126,6 +210,7 @@ window.__ModuleLoader__.load({
 		      rotationSeeded: selection.rotationSeeded,
 		    }));
 		  } catch { /* ignore */ }
+		  scheduleStateSync();
 		}
 
 		async function loadInventory() {
@@ -475,19 +560,34 @@ window.__ModuleLoader__.load({
 		  },
 		};
 
+		// Last scrim color written onto the scrim element (the dirty-check behind
+		// applyEffects' write+reflow path; null = nothing applied / element absent).
+		let appliedScrimColor = null;
+
 		function applyEffects() {
 		  const s = document.body.style;
-		  s.setProperty("--we-scrim-color", "rgba(0,0,0," + selection.scrim + ")");
+		  // setIfChanged: a redundant pass must stay a true no-op. applyEffects runs
+		  // on every <body> style-attribute mutation (the theme presenter's rewrites)
+		  // and on every slider input event; rewriting identical values would dirty
+		  // the style attribute and cost a style/recalc pass each time. Custom
+		  // property values round-trip exactly, so the string compare is reliable;
+		  // priority is compared too, so a plain-priority rewrite by the theme
+		  // presenter is still re-pushed as !important.
+		  const setIfChanged = (name, value, priority) => {
+		    if (s.getPropertyValue(name) === value && s.getPropertyPriority(name) === (priority || "")) return;
+		    s.setProperty(name, value, priority || "");
+		  };
+		  setIfChanged("--we-scrim-color", "rgba(0,0,0," + selection.scrim + ")");
 		  // Border emphasis: the border tokens are low-alpha hairlines; raise their
 		  // alpha via a neutral gray so both light and dark themes stay legible.
-		  s.setProperty("--we-border-alpha", String(selection.border));
+		  setIfChanged("--we-border-alpha", String(selection.border));
 		  // Glass blur strength in px (0 disables the frosted-glass effect).
-		  s.setProperty("--we-blur", selection.blur + "px");
+		  setIfChanged("--we-blur", selection.blur + "px");
 		  // Wallpaper blur strength in px (blurs the wallpaper itself).
-		  s.setProperty("--we-wallpaper-blur", selection.wallpaperBlur + "px");
+		  setIfChanged("--we-wallpaper-blur", selection.wallpaperBlur + "px");
 		  // Compensate for the fringe the blur reveals by scaling the layer up.
 		  const scale = (1 + selection.wallpaperBlur * 0.006).toFixed(4);
-		  s.setProperty("--we-wallpaper-scale", scale);
+		  setIfChanged("--we-wallpaper-scale", scale);
 
 		  // Glass surfaces inline (see GLASS_SURFACES above): only while a wallpaper
 		  // is active; otherwise retract them so an unloaded/closed plugin never leaks
@@ -500,23 +600,31 @@ window.__ModuleLoader__.load({
 		  const scheme = isDark ? "dark" : "light";
 		  if (selection.url) {
 		    const surfaces = GLASS_SURFACES[scheme];
-		    for (const name in surfaces) s.setProperty(name, surfaces[name], "important");
+		    for (const name in surfaces) setIfChanged(name, surfaces[name], "important");
 		  } else {
-		    for (const name in GLASS_SURFACES.light) s.removeProperty(name);
+		    for (const name in GLASS_SURFACES.light) {
+		      if (s.getPropertyValue(name) !== "") s.removeProperty(name);
+		    }
 		  }
 
 		  // Scrim immediacy: some composited/kiosk environments do not repaint a
 		  // z-index:-1 layer promptly when only an inherited CSS variable changes.
-		  // Write the resolved color DIRECTLY onto the scrim element's inline style and
-		  // then force a synchronous layout, so the change is visible on this frame no
-		  // matter how the browser layers the page.
+		  // Write the resolved color DIRECTLY onto the scrim element's inline style
+		  // and then force a synchronous layout, so the change is visible on this
+		  // frame no matter how the browser layers the page. The write+reflow runs
+		  // only when the resolved color actually changed — an unchanged pass must
+		  // not pay a forced layout on every body-style mutation.
 		  const scrim = document.getElementById(SCRIM_ID);
-		  if (scrim) {
-		    scrim.style.background = "rgba(0,0,0," + selection.scrim + ")";
-		  }
-		  // Force reflow so a stalled compositor picks up the new value immediately.
-		  if (document.body && document.body.offsetHeight !== undefined) {
-		    void document.body.offsetHeight;
+		  const scrimColor = "rgba(0,0,0," + selection.scrim + ")";
+		  if (scrim && appliedScrimColor !== scrimColor) {
+		    appliedScrimColor = scrimColor;
+		    scrim.style.background = scrimColor;
+		    // Force reflow so a stalled compositor picks up the new value immediately.
+		    if (document.body && document.body.offsetHeight !== undefined) {
+		      void document.body.offsetHeight;
+		    }
+		  } else if (!scrim && appliedScrimColor !== null) {
+		    appliedScrimColor = null;
 		  }
 		}
 
@@ -530,6 +638,103 @@ window.__ModuleLoader__.load({
 		  for (const name in GLASS_SURFACES.light) s.removeProperty(name);
 		  const scrim = document.getElementById(SCRIM_ID);
 		  if (scrim) scrim.style.background = "";
+		  appliedScrimColor = null;
+		}
+
+		// ── Startup consistency watchdog ─────────────────────────────────────────────
+		// The glass overrides are scheme-sensitive: applyEffects() picks the light or
+		// dark GLASS_SURFACES set from body's data-ds-dark-theme attribute at the
+		// moment it runs. If that write lands in a window where the attribute is not
+		// settled yet, the wrong (light) set is pinned inline with !important — and
+		// whatever is supposed to re-push the correct values afterwards evidently does
+		// not always run (the "pale 新会话 button until a slider is touched" report).
+		// This watchdog re-checks the invariant on a short startup interval, reports
+		// any contradiction to the host diagnostic route (CSS variable values only),
+		// and immediately re-runs applyEffects() to correct it.
+		const GLASS_TOKEN_NAMES = Object.keys(GLASS_SURFACES.light);
+		const WE_VAR_NAMES = ["--we-scrim-color", "--we-border-alpha", "--we-blur", "--we-wallpaper-blur"];
+		const WATCH_INTERVAL_MS = 500;
+		const WATCH_MAX_TICKS = 120; // ~60s startup window, then the watchdog stops.
+
+		function reportDiag(snapshot) {
+		  try {
+		    void fetch(DIAG_URL, {
+		      method: "POST",
+		      headers: { "Content-Type": "application/json" },
+		      body: JSON.stringify(snapshot),
+		    }).catch(() => {}); // best effort — diagnostics never affect behavior
+		  } catch { /* fetch unavailable */ }
+		}
+
+		// Returns null when the inline overrides are consistent with the current theme
+		// attribute; otherwise a map of the glass tokens' current values (for the
+		// diagnostic snapshot).
+		function glassMismatchDetails() {
+		  if (!selection.url) return null;
+		  const s = document.body.style;
+		  const expected = GLASS_SURFACES[
+		    (typeof document.body.hasAttribute === "function" && document.body.hasAttribute("data-ds-dark-theme"))
+		      ? "dark" : "light"
+		  ];
+		  const found = {};
+		  let bad = false;
+		  for (const name of GLASS_TOKEN_NAMES) {
+		    const value = s.getPropertyValue(name);
+		    const priority = s.getPropertyPriority(name);
+		    if (value !== expected[name] || priority !== "important") bad = true;
+		    found[name] = value + (priority ? " !" + priority : "");
+		  }
+		  if (!bad) {
+		    for (const name of WE_VAR_NAMES) {
+		      if (s.getPropertyValue(name) === "") bad = true;
+		    }
+		  }
+		  return bad ? found : null;
+		}
+
+		function snapshotDiag(details) {
+		  const b = document.body;
+		  const s = b.style;
+		  return {
+		    sinceBootMs: Math.round(performance.now()),
+		    readyState: document.readyState,
+		    darkAttr: b.hasAttribute("data-ds-dark-theme"),
+		    htmlColorScheme: document.documentElement.style.getPropertyValue("color-scheme") || "",
+		    weAttr: b.hasAttribute(ACTIVE_ATTR),
+		    url: Boolean(selection.url),
+		    scrim: selection.scrim,
+		    border: selection.border,
+		    blur: selection.blur,
+		    wallpaperBlur: selection.wallpaperBlur,
+		    weVars: {
+		      scrim: s.getPropertyValue("--we-scrim-color"),
+		      border: s.getPropertyValue("--we-border-alpha"),
+		      blur: s.getPropertyValue("--we-blur"),
+		      wallpaperBlur: s.getPropertyValue("--we-wallpaper-blur"),
+		    },
+		    glass: details,
+		  };
+		}
+
+		// Checks the invariant once; on contradiction reports + corrects. Returns true
+		// when a contradiction was found.
+		function verifyEffectsConsistency(where) {
+		  const details = glassMismatchDetails();
+		  if (details === null) return false;
+		  reportDiag({ where, ...snapshotDiag(details) });
+		  applyEffects();
+		  return true;
+		}
+
+		function installConsistencyWatch() {
+		  if (typeof setInterval !== "function" || typeof clearInterval !== "function") return () => {};
+		  let ticks = 0;
+		  const timer = setInterval(() => {
+		    ticks += 1;
+		    if (ticks > WATCH_MAX_TICKS) { clearInterval(timer); return; }
+		    try { verifyEffectsConsistency("watch"); } catch { /* ignore */ }
+		  }, WATCH_INTERVAL_MS);
+		  return () => clearInterval(timer);
 		}
 
 		// ── Settings picker ─────────────────────────────────────────────────────────
@@ -974,6 +1179,38 @@ window.__ModuleLoader__.load({
 		    backdrop-filter: blur(var(--we-blur, 24px)) saturate(var(--we-saturate, 1.6)) brightness(1.05);
 		  }
 
+		  /* ── Popup readability fix (model picker / access mode / slash commands) ───
+		     These three popups sit on translucent glass over the wallpaper and their
+		     stock 55%-alpha fill lets the wallpaper bleed through behind plain text.
+		     Anchors use the CSS-module LOCAL names (modelList / sideTop / menu), which
+		     survive rebuilds — never the hashed prefix. The model-picker dialog is
+		     matched only through its role="menu" list: the settings page reuses the
+		     same _modelList local class WITHOUT a menu role, so a bare [class*=
+		     "_modelList"] anchor would glass over the settings editor cards too. */
+		  body[data-we-wallpaper] :is(
+		    [role="dialog"]:has([role="menu"][class*="_modelList"]),
+		    [role="menu"][class*="_modelList"],
+		    [role="menu"][class*="_sideTop_"],
+		    [role="listbox"][class*="_menu"]
+		  ) {
+		    background: rgba(255, 255, 255, 0.94) !important;
+		    backdrop-filter: blur(24px) saturate(1.4) !important;
+		    box-shadow:
+		      inset 0 1px 0 rgba(255, 255, 255, 0.6),
+		      0 12px 32px rgba(0, 0, 0, 0.16) !important;
+		  }
+		  body[data-we-wallpaper][data-ds-dark-theme] :is(
+		    [role="dialog"]:has([role="menu"][class*="_modelList"]),
+		    [role="menu"][class*="_modelList"],
+		    [role="menu"][class*="_sideTop_"],
+		    [role="listbox"][class*="_menu"]
+		  ) {
+		    background: rgba(22, 26, 34, 0.94) !important;
+		    box-shadow:
+		      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+		      0 12px 32px rgba(0, 0, 0, 0.5) !important;
+		  }
+
 		  /* Picker chrome. */
 		  .we-picker { display: flex; flex-direction: column; gap: 8px; }
 		  .we-picker__select { max-width: 100%; }
@@ -1027,21 +1264,27 @@ window.__ModuleLoader__.load({
 		      const unsubEffects = subscribe(applyEffects);
 		      // The theme presenter retracts and re-writes every token inline on <body>
 		      // whenever it applies a snapshot, which would wipe the translucent-glass
-		      // overrides. Watch <body>'s style attribute and re-push them after any
-		      // such rewrite, so inline !important overrides always win regardless of
-		      // who applied last. Reentrancy is safe: applyEffects writes the same
-		      // values, so a second pass produces no mutation and the observer settles.
+		      // overrides. Watch <body>'s style attribute — and the dark-theme
+		      // attribute, whose flip is exactly what selects the other glass set —
+		      // and re-run applyEffects after any such change, so inline !important
+		      // overrides always win regardless of who applied last. Reentrancy is
+		      // safe: applyEffects writes the same values, so a second pass produces
+		      // no mutation and the observer settles.
 		      let observer = null;
 		      if (typeof MutationObserver === "function") {
 		        observer = new MutationObserver(() => applyEffects());
-		        observer.observe(document.body, { attributes: true, attributeFilter: ["style"] });
+		        observer.observe(document.body, { attributes: true, attributeFilter: ["style", "data-ds-dark-theme"] });
 		      }
+		      // Startup watchdog: re-verify the glass scheme invariant for ~60s after
+		      // boot and correct + report any contradiction (see the block above).
+		      const stopWatch = installConsistencyWatch();
 		      syncLayers();
 		      applyEffects();
 		      return () => {
 		        unsub();
 		        unsubEffects();
 		        if (observer) observer.disconnect();
+		        stopWatch();
 		        clearRotationTimer();
 		        const node = document.getElementById(LAYER_ID);
 		        if (node) node.remove();
@@ -1073,6 +1316,7 @@ window.__ModuleLoader__.load({
 		  //    initial sync is harmless duplication.
 		  syncLayers();
 		  applyEffects();
+		  verifyEffectsConsistency("apply");
 
 		  loadInventory();
 		}

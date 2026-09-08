@@ -45,23 +45,23 @@ function matchOption(options, value) {
 // ── 样式（内联，避免 CSS 模块构建）──────────────────────────────────────
 const css = {
   section: { maxWidth: 720, color: "var(--dsw-alias-label-primary, #1f2329)", fontFamily: "inherit" },
-  lead: { fontSize: 13, lineHeight: 1.6, color: "var(--dsw-alias-label-tertiary, #6b7280)", margin: "0 0 16px" },
-  card: { border: "1px solid var(--dsw-alias-border-l2, #e5e7eb)", borderRadius: 8, marginBottom: 16, overflow: "hidden" },
-  cardHead: { padding: "10px 14px", fontWeight: 600, fontSize: 14, background: "var(--dsw-alias-bg-module-platform, #f7f8fa)", display: "flex", alignItems: "center", gap: 8 },
-  row: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 14px", padding: "8px 14px", borderTop: "1px solid var(--dsw-alias-border-l1, #f0f1f3)" },
-  rowAlt: { background: "var(--dsw-alias-bg-module-platform, #fafbfc)" },
-  modelId: { flex: "1 1 140px", minWidth: 120, fontSize: 13, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  field: { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--dsw-alias-label-secondary, #4b5563)" },
-  select: { padding: "4px 6px", borderRadius: 6, border: "1px solid var(--dsw-alias-border-l2, #d1d5db)", background: "var(--dsw-specific-input-major, #fff)", fontSize: 12, color: "inherit", minWidth: 96, maxWidth: 140 },
-  input: { padding: "4px 6px", borderRadius: 6, border: "1px solid var(--dsw-alias-border-l2, #d1d5db)", background: "var(--dsw-specific-input-major, #fff)", fontSize: 12, width: 90, color: "inherit" },
-  checkbox: { accentColor: "var(--dsw-alias-brand-primary, #3b82f6)", margin: 0 },
-  empty: { padding: 12, fontSize: 13, color: "var(--dsw-alias-label-tertiary, #9ca3af)" },
-  actions: { display: "flex", gap: 10, alignItems: "center", marginTop: 4, flexWrap: "wrap" },
-  button: { padding: "6px 14px", borderRadius: 6, border: "none", background: "var(--dsw-alias-brand-primary, #3b82f6)", color: "var(--dsw-alias-label-primary-inverted, #fff)", fontSize: 13, cursor: "pointer" },
+  lead: { fontSize: 13, lineHeight: 1.6, color: "var(--dsw-alias-label-tertiary, #6b7280)", margin: "0 0 20px" },
+  card: { border: "1px solid color-mix(in srgb, var(--dsw-alias-border-l2, #e5e7eb) 92%, transparent)", borderRadius: 14, marginBottom: 18, overflow: "hidden", background: "color-mix(in srgb, var(--dsw-alias-bg-base, #fff) 84%, transparent)", boxShadow: "0 8px 24px rgb(0 0 0 / 0.08), inset 0 1px 0 rgb(255 255 255 / 0.06)" },
+  cardHead: { padding: "13px 16px", fontWeight: 650, fontSize: 14, background: "color-mix(in srgb, var(--dsw-alias-bg-module-platform, #f7f8fa) 82%, transparent)", display: "flex", alignItems: "center", gap: 8, borderBottom: "1px solid var(--dsw-alias-border-l1, #f0f1f3)" },
+  row: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: "10px 14px", padding: "12px 16px", borderTop: "1px solid color-mix(in srgb, var(--dsw-alias-border-l1, #f0f1f3) 82%, transparent)", transition: "background-color 120ms ease" },
+  rowAlt: { background: "color-mix(in srgb, var(--dsw-alias-bg-module-platform, #fafbfc) 42%, transparent)" },
+  modelId: { flex: "1 1 140px", minWidth: 120, fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  field: { display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, color: "var(--dsw-alias-label-secondary, #4b5563)" },
+  select: { padding: "5px 8px", borderRadius: 8, border: "1px solid var(--dsw-alias-border-l2, #d1d5db)", background: "var(--dsw-specific-input-major, #fff)", fontSize: 12, color: "inherit", minWidth: 96, maxWidth: 140 },
+  input: { padding: "5px 8px", borderRadius: 8, border: "1px solid var(--dsw-alias-border-l2, #d1d5db)", background: "var(--dsw-specific-input-major, #fff)", fontSize: 12, width: 90, color: "inherit" },
+  checkbox: { accentColor: "var(--dsw-alias-brand-primary, #3b82f6)", margin: 0, width: 16, height: 16 },
+  empty: { padding: "14px 16px", fontSize: 13, color: "var(--dsw-alias-label-tertiary, #9ca3af)" },
+  actions: { display: "flex", gap: 10, alignItems: "center", marginTop: 8, paddingTop: 14, borderTop: "1px solid var(--dsw-alias-border-l2, #e5e7eb)", flexWrap: "wrap" },
+  button: { padding: "7px 15px", borderRadius: 8, border: "none", background: "var(--dsw-alias-brand-primary, #3b82f6)", color: "var(--dsw-alias-label-primary-inverted, #fff)", fontSize: 13, fontWeight: 600, cursor: "pointer" },
   buttonDisabled: { opacity: 0.5, cursor: "not-allowed" },
   hint: { fontSize: 12, color: "var(--dsw-alias-label-tertiary, #9ca3af)" },
   status: { fontSize: 12, color: "var(--dsw-alias-label-secondary, #4b5563)" },
-  error: { fontSize: 12, color: "#dc2626" }
+  error: { fontSize: 12, color: "var(--dsw-alias-state-error-primary, #dc2626)" }
 };
 
 function ModelGlyph({ size = 22 }) {

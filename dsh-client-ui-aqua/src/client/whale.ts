@@ -31,6 +31,11 @@ const MOUSE_DECAY = 0.2
 const MOUSE_DISTORT = 5
 /** Render cadence, matching the site's FPS prop. */
 const FPS = 30
+/** Re-center cadence, ms. positionHost reads layout (getBoundingClientRect on
+ *  the phase column); every frame would force a synchronous layout 30×/s while
+ *  the app streams DOM mutations. The host box only moves on resize/sidebar
+ *  collapse, so 200ms re-centering is visually identical. */
+const REPOSITION_MS = 200
 /** Camera viewport height in world units (z 18, fov 50). */
 const WORLD_H = 2 * 18 * Math.tan((50 * Math.PI) / 360)
 
@@ -272,6 +277,7 @@ export function mountWhale(host: HTMLElement, dark: boolean): WhaleHandle {
   }
 
   let mouseNdc = { x: 0, y: 0 }
+  let lastReposition = 0
   const onMove = (event: PointerEvent): void => {
     const rect = holder.getBoundingClientRect()
     if (rect.width === 0 || rect.height === 0) return
@@ -294,8 +300,12 @@ export function mountWhale(host: HTMLElement, dark: boolean): WhaleHandle {
       }
       last = now - ((now - last) % (1000 / FPS))
       // The phase container mounts after the plugin, and the sidebar can
-      // collapse/expand — keep the wrapper centered on the main column.
-      positionHost()
+      // collapse/expand — keep the wrapper centered on the main column
+      // (re-centering is throttled: see REPOSITION_MS).
+      if (now - lastReposition >= REPOSITION_MS) {
+        lastReposition = now
+        positionHost()
+      }
       const elapsed = (now - startedAt) / 1000
       const raw = Math.min(1, Math.max(0, (elapsed - 0.3) / 2.5))
       const D = 1 - Math.pow(1 - raw, 3)
