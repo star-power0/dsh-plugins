@@ -43,16 +43,17 @@ export interface GenuiFenceContext {
 export declare function resolveGenuiSpec(raw: string, context?: GenuiFenceContext): GenuiSpec | null;
 /**
  * The resolved fence render for the DOM channel: `null` when the body is
- * unrepairable (the stock code block stays visible), otherwise the panel
- * publisher (`panel:true`; renders nothing in the flow — mounted as an empty
- * root so the taken-over block is hidden) or the inline GenuiBlock tree.
- * Shared verbatim by both channels.
+ * unrepairable (the stock code block stays visible), otherwise the inline
+ * GenuiBlock tree. Shared verbatim by both channels.
+ *
+ * A legacy `panel:true` fence renders inline now that the panel dock is gone
+ * (the operator removed that surface) — old history stays readable instead of
+ * collapsing into an empty mount.
  */
 export declare function renderResolvedFenceNode(raw: string, key: Key, context?: GenuiFenceContext): ReactNode | null;
 /**
  * Registry-channel fence renderer (contract hosts): like the resolved node,
  * but an unrepairable body renders the fallback code block + settled
- * diagnostic — the host replaced its own block with our output — and an
- * unpublishable `panel:true` fence renders `null` (nothing in the flow).
+ * diagnostic — the host replaced its own block with our output.
  */
 export declare function renderGenuiFence(raw: string, key: Key, context?: GenuiFenceContext): ReactNode;

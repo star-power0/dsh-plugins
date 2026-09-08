@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.9] - 2026-09-06
+### 移除（应丞相要求）
+- **删除 `render_ui` 工具**：不再向宿主注册把 spec 渲染为工具行卡片的工具；`src/plugin/tool.ts` 移除 `createRenderUiTool` 及其专属辅助（RENDER_UI_* 常量、specOf/unwrapSpec/parseSpecJson/cardTitle 等，validate_dsh_ui 仍用到的 countNodes 保留），`src/plugin/index.ts` 去掉对应 `tools.register` 调用。
+- **删除 `/panel` 斜杠命令与会话面板 dock**：`src/client/index.tsx` 不再注册 `conversation.input.dock`（GenuiPanel）、`tool.call.toolview`（GenuiToolView）与 `inputTriggers` 的 `createPanelSlashSource`，连带移除 `panelActionSend`/`sendPanelInstruction`。`panel-command.ts`/`panel.tsx`/`toolview.tsx`/`panel-store.ts` 保留在源码树但不接入（便于日后恢复）。
+- **`panel:true` 围栏降级为内联渲染**：`src/client/fence-render.tsx` 去掉 `FencePanelPublisher` 发布分支，旧历史里的 `panel:true` 围栏现在按普通内联组件渲染，不再塌陷成空挂载。
+- **系统提示词瘦身**：`GENUI_SECTION_TEXT` 删除 “Tool channel” 与 “Panel” 两行，新增「唯一通道」一行声明 render_ui/面板均不存在、`panel`/`append` 字段无效。
+### 保留
+- 内联 ```dsh-ui 围栏渲染（registry + DOM 双通道）、`validate_dsh_ui` 工具、mermaid/three 懒加载资源路由、交互状态持久化——全部不变，即丞相要的正常对话内 UI。
+### 验证
+- 清装 devDeps 后 `tsc -p tsconfig.json` 全绿（0 error）；`tsdown` 四路产物构建成功，`lib/client.js` 124605→112465 B、`lib/index.js` 47454→40947 B。产物核验：`client.js` 内 `conversation.input.dock`/`genui-panel`/`tool.call.toolview` 全部消失、`dsh-ui` 围栏核心仍在；`index.js` 内 `validate_dsh_ui` 在、`render_ui` 仅剩提示词文本与注释字样。`plugin-safety check` 19 插件双端全绿、无 id/入口冲突。改动前存档 `plugin-snapshots/20260906-070143-remove-render-ui-and-panel`。需刷新 web/desktop 各验证一次实际效果。
+
 ## [0.8.8] - 2026-08-23
 ### 修复
 - **slash 菜单 `/` 下 genui panel 恒为第一候选（无论输入什么都默认 genui）**：`/panel` 源的 `candidates` 原本无条件返回 `panel` 一条，不按输入过滤——菜单打开瞬间官方 command（order 0，异步加载）/skill（order 2，fetch）两组的候选还在 pending，genui 同步返回第一个就绪 → `firstHighlight` 默认高亮落在 genui 上；输入 `/c`、`/compact` 等时 genui 也恒在列表里。修复：`createPanelSlashSource` 的 `candidates` 只在前缀匹配 `panel`（空输入 `/`、或 `/p`、`/pa`…、`/panel`）时返回候选，其余查询返回 `[]`，与官方 compact/skill 源的过滤行为一致（`name.startsWith(query)`）。`onPick`/`matchEnter` 不变，直接输入 `/panel` 的裁决路径不受影响。

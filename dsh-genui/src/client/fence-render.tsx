@@ -14,16 +14,15 @@
  * Structural types are declared locally on purpose: the context contract is
  * a data shape, and pristine hosts do not export the host-side type names.
  */
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type Key, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type CSSProperties, type Key, type ReactNode } from 'react'
 import { CodeBlock } from '@deepseek-ai/dsh-client-ui-primitives'
 import { ErrorBoundary } from './ErrorBoundary.tsx'
 import { GenuiBlock } from './GenuiBlock.tsx'
 import { repairGenuiSpec } from './guard.ts'
 import { fenceStateKey } from './interaction-store.ts'
 import { parsePartialGenuiSpec } from './parse-partial.ts'
-import { applyPanelOperation, diagnosePanelBudget, type PanelOperationStatus } from './panel-store.ts'
 import type { GenuiSpec } from './spec.ts'
-import { completeFenceJson, describeJsonFailure, isCompleteJson, repairFenceJson } from '../shared/fence-repair.ts'
+import { completeFenceJson, describeJsonFailure, repairFenceJson } from '../shared/fence-repair.ts'
 
 /** Settled fence source identity (data shape, host-independent). */
 export interface GenuiFenceSource {
@@ -91,31 +90,6 @@ function FenceFallback({ raw, fenceKey }: { raw: string; fenceKey: Key }) {
 }
 
 /**
- * Keyed publisher for a settled `panel:true` fence: submits ONE panel
- * operation from the host-provided stable source (id + order), in an
- * effect — never inside the render function. StrictMode's duplicate effects
- * are absorbed by the operation map's per-source dedup, so the panel folds
- * and notifies exactly once per source. Renders nothing.
- */
-function FencePanelPublisher({ sessionId, sourceId, order, spec }: {
-  sessionId: string
-  sourceId: string
-  order: readonly [number, number, number]
-  spec: GenuiSpec
-}) {
-  useEffect(() => {
-    const status: PanelOperationStatus = applyPanelOperation(sessionId, {
-      sourceId,
-      order,
-      mode: spec.append === true ? 'append' : 'replace',
-      spec,
-    })
-    if (status === 'overflow') diagnosePanelBudget(sessionId, sourceId)
-  }, [sessionId, sourceId, order, spec])
-  return null
-}
-
-/**
  * Resolve a raw fence body to a guarded spec.
  *
  * - Tier-1 repair (quote escape + trailing commas): safe at any time —
@@ -172,59 +146,26 @@ function renderInlineFence(key: Key, context: GenuiFenceContext | undefined, spe
 
 /**
  * The resolved fence render for the DOM channel: `null` when the body is
- * unrepairable (the stock code block stays visible), otherwise the panel
- * publisher (`panel:true`; renders nothing in the flow — mounted as an empty
- * root so the taken-over block is hidden) or the inline GenuiBlock tree.
- * Shared verbatim by both channels.
+ * unrepairable (the stock code block stays visible), otherwise the inline
+ * GenuiBlock tree. Shared verbatim by both channels.
+ *
+ * A legacy `panel:true` fence renders inline now that the panel dock is gone
+ * (the operator removed that surface) — old history stays readable instead of
+ * collapsing into an empty mount.
  */
 export function renderResolvedFenceNode(raw: string, key: Key, context?: GenuiFenceContext): ReactNode | null {
   const spec = resolveGenuiSpec(raw, context)
   if (spec === null) return null
-  if (spec.panel === true) {
-    // Publish only with a settled stable source — streaming/identity-less
-    // renders keep the panel untouched. Appends additionally gate on a
-    // complete body (a settled-but-malformed append never merges partial
-    // content).
-    if (context !== undefined && context.sessionId !== undefined && context.source !== undefined) {
-      if (spec.append === true && !isCompleteJson(raw)) return <Fragment key={key} />
-      return (
-        <FencePanelPublisher
-          key={key}
-          sessionId={context.sessionId}
-          sourceId={context.source.id}
-          order={context.source.order}
-          spec={spec}
-        />
-      )
-    }
-    return <Fragment key={key} />
-  }
   return renderInlineFence(key, context, spec)
 }
 
 /**
  * Registry-channel fence renderer (contract hosts): like the resolved node,
  * but an unrepairable body renders the fallback code block + settled
- * diagnostic — the host replaced its own block with our output — and an
- * unpublishable `panel:true` fence renders `null` (nothing in the flow).
+ * diagnostic — the host replaced its own block with our output.
  */
 export function renderGenuiFence(raw: string, key: Key, context?: GenuiFenceContext): ReactNode {
   const spec = resolveGenuiSpec(raw, context)
   if (spec === null) return <FenceFallback key={key} fenceKey={key} raw={raw} />
-  if (spec.panel === true) {
-    if (context !== undefined && context.sessionId !== undefined && context.source !== undefined) {
-      if (spec.append === true && !isCompleteJson(raw)) return null
-      return (
-        <FencePanelPublisher
-          key={key}
-          sessionId={context.sessionId}
-          sourceId={context.source.id}
-          order={context.source.order}
-          spec={spec}
-        />
-      )
-    }
-    return null
-  }
   return renderInlineFence(key, context, spec)
 }

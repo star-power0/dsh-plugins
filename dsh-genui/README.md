@@ -4,7 +4,7 @@
 - tsconfig 路径本地化（上游指向作者本机源码树，本机无法构建）
 - 原版 rc.6 宿主无 fence-registry 扩展点：补 DOM 通道渲染（MutationObserver 接管 + 结构兜底）
 - 修复 rc.6 壳上 dsh-ui 围栏静默不渲染问题
-- /panel slash 候选前缀过滤（只在输入匹配 panel 时返回候选）
+- v0.8.9 应运营者要求移除 `render_ui` 工具、`/panel` 命令与会话面板 dock——```dsh-ui 围栏成为唯一 UI 通道；`panel`/`append` 字段无效，旧 `panel:true` 围栏降级为内联渲染
 - Safari 无锚点行降级链与一次性告警
 # dsh-genui
 
@@ -22,8 +22,8 @@ dsh-genui（包名 `@omdsh-dev/dsh-genui`，MIT 许可）是面向 DeepSeek Harn
 - **表单语义**：`input` 回车、`textarea` Ctrl+Enter 即时提交（`submit:true`）；带 `id` 的字段值汇入 `submit` 的 `fields`。
 - **本地优先**：界面可自行完成的状态变化（判卷、判题、重置、展开、选中）一律本地即时完成；`action` 仅用于必须模型参与的操作（生成内容、执行工具、下一步建议）。
 - **事件循环**：带 `action` 的按钮/开关/输入/下拉/复选/单选/文本域/测验在点击或失焦时回传模型；同名 `action` 300 ms 尾沿防抖，连点合并为一次（以最后一次值为准）。
-- **工具通道**：`render_ui` 工具将同一份规格渲染为工具行卡片；交付物型界面走工具通道，回答型界面走围栏。
-- **会话面板**：常驻输入区上方的 dock；`render_ui` 与 `panel: true` 围栏原地更新同一块界面；`/panel` 命令客户端直开（`/panel <指令>` 交模型定制、`/panel clear` 清空）；顶边框可拖拽调高；`append: true` 增量合并（同名标签页追加、新标签页新增），整面板上限 200 节点 / 200 条追加。
+- **唯一通道**：```dsh-ui 围栏是唯一的 UI 输出方式，组件渲染在回答正文里（本地 v0.8.9 起已移除 `render_ui` 工具与会话面板）。
+- **围栏校验**：`validate_dsh_ui` 工具在发出复杂围栏前做 JSON 预检，可修复的错误直接返回修好的 JSON。
 - **自愈与上限**：每个围栏经规格守卫——坏节点静默丢弃、数值钳位、字符串截断，整树 ≤200 节点、≤8 层嵌套。
 - **图错误自愈**：Mermaid 渲染失败自动修复重试（剥离反引号、引号化中文/空格标签、移除 `<br/>`），仍失败才降级为源码。
 - **可访问性**：标签页/折叠/开关/进度条带完整 ARIA 与键盘导航（方向键切页、Home/End 跳转）。
@@ -36,7 +36,7 @@ dsh-genui（包名 `@omdsh-dev/dsh-genui`，MIT 许可）是面向 DeepSeek Harn
 - **Registry 通道**：宿主提供 `fence-registry` 扩展点（新版构建）时，围栏经宿主流式渲染管线注册，与宿主无缝配合。
 - **DOM 通道**：宿主无该扩展点（含原版 DSH 与旧版构建）时，插件观察会话 DOM 自行挂载渲染树；支持流式渲染与多表面发现（`md-code-block`、`.code-block` / `.code-block-small`，以及「banner 标注 `dsh-ui` 且含 `<pre>` 正文」的结构兜底）。
 
-无论走哪条通道，组件、交互、面板与持久化行为一致。
+无论走哪条通道，组件、交互与持久化行为一致。
 
 ## 安装与接入
 
@@ -48,7 +48,7 @@ dsh-genui（包名 `@omdsh-dev/dsh-genui`，MIT 许可）是面向 DeepSeek Harn
 
 ## 构建
 
-宿主端入口为 `lib/index.js`（`apply` + 注入 `systemPrompt`），客户端入口为 `lib/client.js`（`dsh.client.platform: "web"`，Desktop 端同样加载）。mermaid 与 three.js 引擎作为按需资产（`lib/assets/*.js`）由插件自注册 HTTP 路由托管，`lib/client.js` 体积约 124 KB。
+宿主端入口为 `lib/index.js`（`apply` + 注入 `systemPrompt`），客户端入口为 `lib/client.js`（`dsh.client.platform: "web"`，Desktop 端同样加载）。mermaid 与 three.js 引擎作为按需资产（`lib/assets/*.js`）由插件自注册 HTTP 路由托管，`lib/client.js` 体积约 112 KB。
 
 本地构建：
 

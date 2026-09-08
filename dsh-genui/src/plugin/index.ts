@@ -17,7 +17,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createRenderUiTool, createValidateDshUiTool } from './tool.ts'
+import { createValidateDshUiTool } from './tool.ts'
 
 /** Convention: tool guidance uses 100–199; bash's section is 104. */
 export const GENUI_SECTION_ORDER = 105
@@ -110,11 +110,12 @@ Rules:
 - Durable state: 交互状态按「会话+内容指纹」持久化——刷新/重放恢复；重渲染相同内容保留，新内容重置。
 - 卷子模式: 每题一个 radio（group+answer+explanation）+ 一个 submit（groups 全列），本地判分。
 - Secrets ban: 不索取密码、API Key、Token、恢复码；需要时拒绝并解释。
-- Tool channel: render_ui 工具把同一 spec 渲染为工具行卡片（交付物型界面用）；围栏用于回答内联 UI。
-- Panel: "panel":true 只渲染进会话面板 dock 并原地更新；"append":true 追加合并（同标签 tabs 追加/新标签加入/尾部追加）；上限 200 节点/200 次追加，满了发 replace 重建。面板组件来的 [genui-action] 只回一个 panel:true 围栏 + 至多一行 10 字内确认，不解释、不用普通围栏。`
+- 唯一通道: dsh-ui 围栏是唯一的 UI 输出方式，渲染在回答正文里。没有 render_ui 工具，也不使用会话面板（"panel" / "append" 字段无效，不要输出）。`
 
 /**
- * Register the GenUI output-language section and the render_ui tool.
+ * Register the GenUI output-language section and the validate_dsh_ui tool.
+ * (The render_ui tool was removed at the operator's request; the fence
+ * channel is the only UI path.)
  * @param ctx - cordis context.
  */
 // `tools` is intentionally NOT injected: the service is optional for this
@@ -131,9 +132,9 @@ export function apply(ctx: Context): void {
   })
   // The tools service is optional: hosts without tool access (or minimal
   // compositions) keep the fence channel; only when the registry exists does
-  // the render_ui tool join the model's tool set. `reflect.get(name, false)`
-  // is cordis's non-throwing optional service lookup (the proxy's own trap
-  // uses it) — property access without inject would throw instead.
+  // the validate_dsh_ui tool join the model's tool set. `reflect.get(name,
+  // false)` is cordis's non-throwing optional service lookup (the proxy's own
+  // trap uses it) — property access without inject would throw instead.
   //
   // Start-up ordering: this plugin injects only `systemPrompt`, so cordis
   // starts it EARLY — before the tools provider (which injects deeper
@@ -147,7 +148,6 @@ export function apply(ctx: Context): void {
     if (registered) return
     const tools = value ?? ctx.reflect.get('tools', false) as { register(tool: unknown): unknown } | undefined
     if (tools === undefined) return
-    tools.register(createRenderUiTool())
     tools.register(createValidateDshUiTool())
     registered = true
   }

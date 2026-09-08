@@ -1000,163 +1000,12 @@ function completeFenceJson(raw) {
 }
 //#endregion
 //#region src/plugin/tool.ts
-/**
-* Arguments schema: an open `spec` slot. The schema must NOT reject anything
-* the guard could repair — the model's component trees are imperfect by
-* nature, and the guard heals them; argument validation would only strand
-* them. `additionalProperties: false` keeps the call shape honest.
-*
-* `spec` IS typed `object` on purpose: the guard can only repair plain
-* records (a serialized JSON string, array, or scalar root is unusable), so
-* argument validation rejecting non-objects loses nothing repairable — and
-* it stops the model from double-encoding the tree as a string (observed
-* twice in the wild), failing fast with a clear schema error instead.
-*/
-const RENDER_UI_PARAMETERS = {
-	type: "object",
-	properties: { spec: {
-		type: "object",
-		description: "GenUI component tree (white-listed vocabulary, see the dsh-ui fence section in the system prompt). Deep-validated and repaired by the renderer. Pass the spec as a JSON OBJECT — never as a serialized JSON string (a string fails argument validation).",
-		properties: {
-			title: {
-				type: "string",
-				description: "Short title shown as the card banner."
-			},
-			gap: {
-				type: "number",
-				description: "Vertical gap between root items in px."
-			},
-			panel: {
-				type: "boolean",
-				description: "Panel-only: renders into the session panel dock instead of the message flow."
-			},
-			items: {
-				type: "array",
-				description: "Root component list (white-listed vocabulary).",
-				items: { type: "object" }
-			}
-		}
-	} },
-	required: ["spec"],
-	additionalProperties: false
-};
-/** The tool's canonical value is a short model-facing summary string. */
-const RENDER_UI_OUTPUT_SCHEMA = {
-	type: "string",
-	description: "One-line human-readable render summary for the model."
-};
-/**
-* Read the `spec` argument defensively (presenters run on replayed args).
-*
-* The harness tool-call bridge has been observed to deliver arguments in
-* shapes other than the authored `{ spec: <object> }`:
-* - `{ spec: "<JSON string>" }` — spec serialized to text;
-* - `{ arguments: "<JSON string>" }` / `{ arguments: <object> }` — a
-*   double-encoded wrapper from the SDK tool-call bridge (seen live in the
-*   web GUI: small specs arrived wrapped this way, large specs arrived with
-*   their JSON corrupted mid-stream);
-* - a bare JSON string (double-encoded root).
-* Each shape is unwrapped here so the guard can repair the actual tree.
-* Corrupted JSON cannot be recovered (bytes were lost in transit): it yields
-* `undefined` plus a diagnostic log line for the transport-layer bug.
-*/
-function specOf(args) {
-	if (typeof args === "string") return parseSpecJson(args, "bare-string");
-	if (typeof args !== "object" || args === null) return void 0;
-	const record = args;
-	if ("spec" in record) {
-		const s = record.spec;
-		if (typeof s === "string") return parseSpecJson(s, "spec-string");
-		return unwrapSpec(s, "spec");
-	}
-	if ("arguments" in record) {
-		const a = record.arguments;
-		if (typeof a === "string") return parseSpecJson(a, "arguments-string");
-		if (typeof a === "object" && a !== null) return unwrapSpec(a, "arguments");
-	}
-}
-/**
-* Peel nested `{ spec: ... }` wrapper layers. Observed bridge shapes nest the
-* authored `spec` object one or more levels deep (e.g. the serialized text
-* inside `{ arguments: "..." }` is itself `{ spec: { title, gap, items } }`),
-* so unwrapping stops only at a value that carries no `spec` key.
-*/
-function unwrapSpec(value, shape) {
-	if (typeof value === "object" && value !== null) {
-		const record = value;
-		if ("spec" in record) {
-			const s = record.spec;
-			if (typeof s === "string") return parseSpecJson(s, `${shape}/spec-string`);
-			return unwrapSpec(s, `${shape}/spec`);
-		}
-	}
-	return value;
-}
-/** Try to decode a serialized spec; log a diagnostic when it is broken. */
-function parseSpecJson(raw, shape) {
-	try {
-		return unwrapSpec(JSON.parse(raw), shape);
-	} catch (error) {
-		const detail = error instanceof Error ? error.message : String(error);
-		const pos = /position (\d+)/.exec(detail)?.[1] ?? "?";
-		console.error(`[genui-tool] spec wrapped as ${shape} but its JSON is broken (${raw.length} bytes, error at ${pos}); cannot recover — bytes lost in transit`);
-		return;
-	}
-}
 /** Total node count of a repaired spec — the shared guard traversal
 * (`countGenuiNodes`) so the tool reports the SAME number the panel fold and
 * validation use. A local walker used to under-count specs whose content
 * lives inside tabs/accordion/file-tree (their children are not `.items`). */
 function countNodes(spec) {
 	return countGenuiNodes(spec, GENUI_LIMITS.maxNodes);
-}
-/** Tool-call title shared by the pending and completed presentations. */
-function cardTitle(args) {
-	const spec = repairGenuiSpec(specOf(args));
-	return spec === null ? void 0 : `渲染 UI：${spec.title ?? "未命名"}`;
-}
-/**
-* Build the render_ui tool definition. Registered by the plugin node half;
-* `ctx.tools.register` consumes it exactly like a `defineTool` result.
-*/
-function createRenderUiTool() {
-	return {
-		name: "render_ui",
-		description: "Render an interactive UI card in the conversation tool row by passing a GenUI spec (a white-listed component tree; the same vocabulary as the ```dsh-ui fence, see the system prompt). Use it when the user asks for a structured panel, dashboard, or form that belongs in the tool row rather than inline in the reply. The card is interactive client-side (tabs, buttons, inputs, switches); components carrying an \"action\" field send [genui-action] back to you when the user interacts, and you should re-render the updated UI.",
-		parameters: RENDER_UI_PARAMETERS,
-		output: {
-			schema: RENDER_UI_OUTPUT_SCHEMA,
-			render(_args, value) {
-				return [{
-					type: "text",
-					text: String(value)
-				}];
-			},
-			presentationMeta(args) {
-				return repairGenuiSpec(specOf(args));
-			}
-		},
-		async execute(args) {
-			const spec = repairGenuiSpec(specOf(args));
-			if (spec === null) return "render_ui：spec 无效 —— 根对象需要 \"items\" 数组（组件树白名单见系统提示词），请修正后重试。";
-			return `已渲染 UI「${spec.title ?? "未命名"}」（${countNodes(spec)} 个组件）。用户现在可以看到这张卡片；组件带 action 时，用户交互会以 [genui-action] 消息发回给你，届时请重新渲染更新后的界面。`;
-		},
-		presentCall(args) {
-			const title = cardTitle(args);
-			return title === void 0 ? void 0 : {
-				card: "generic",
-				title,
-				kind: "other"
-			};
-		},
-		presentResult(args) {
-			const title = cardTitle(args);
-			return title === void 0 ? void 0 : {
-				card: "generic",
-				title
-			};
-		}
-	};
 }
 /**
 * The `validate_dsh_ui` tool: a model-facing pre-flight check for the
@@ -1240,7 +1089,7 @@ function bracketDiagnostic(raw) {
 	return diffs.length === 0 ? "" : `  括号计数：${diffs.join("；")}（长表格最易在收尾处错位，如把 ]]}]} 写成 ]}]}]}）\n`;
 }
 const COMMON_CAUSES = "常见原因：① 收尾括号错位/缺失（{ 与 }、[ 与 ] 数量不相等）② 字符串值内用了半角引号 \"（中文引语请用 “” 或 「」）③ 尾随逗号 ④ 字符串未闭合";
-/** Build the validate_dsh_ui tool definition (registered alongside render_ui). */
+/** Build the validate_dsh_ui tool definition. */
 function createValidateDshUiTool() {
 	return {
 		name: "validate_dsh_ui",
@@ -1373,10 +1222,11 @@ Rules:
 - Durable state: 交互状态按「会话+内容指纹」持久化——刷新/重放恢复；重渲染相同内容保留，新内容重置。
 - 卷子模式: 每题一个 radio（group+answer+explanation）+ 一个 submit（groups 全列），本地判分。
 - Secrets ban: 不索取密码、API Key、Token、恢复码；需要时拒绝并解释。
-- Tool channel: render_ui 工具把同一 spec 渲染为工具行卡片（交付物型界面用）；围栏用于回答内联 UI。
-- Panel: "panel":true 只渲染进会话面板 dock 并原地更新；"append":true 追加合并（同标签 tabs 追加/新标签加入/尾部追加）；上限 200 节点/200 次追加，满了发 replace 重建。面板组件来的 [genui-action] 只回一个 panel:true 围栏 + 至多一行 10 字内确认，不解释、不用普通围栏。`;
+- 唯一通道: dsh-ui 围栏是唯一的 UI 输出方式，渲染在回答正文里。没有 render_ui 工具，也不使用会话面板（"panel" / "append" 字段无效，不要输出）。`;
 /**
-* Register the GenUI output-language section and the render_ui tool.
+* Register the GenUI output-language section and the validate_dsh_ui tool.
+* (The render_ui tool was removed at the operator's request; the fence
+* channel is the only UI path.)
 * @param ctx - cordis context.
 */
 const inject = ["systemPrompt"];
@@ -1391,7 +1241,6 @@ function apply(ctx) {
 		if (registered) return;
 		const tools = value ?? ctx.reflect.get("tools", false);
 		if (tools === void 0) return;
-		tools.register(createRenderUiTool());
 		tools.register(createValidateDshUiTool());
 		registered = true;
 	};
