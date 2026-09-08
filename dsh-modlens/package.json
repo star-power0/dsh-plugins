@@ -16,6 +16,7 @@
   },
   "files": [
     "index.js",
+    "openai-site-chain.mjs",
     "client.js",
     "client-build.mjs",
     "cordis.patch.yml",

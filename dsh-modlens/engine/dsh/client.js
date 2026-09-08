@@ -189,6 +189,17 @@ window.__ModuleLoader__.load({
         subtitle: 'Vision engine provider configuration.',
         openConfig: 'Open config file',
         automatic: 'Automatic (failover chain decides)',
+        sitesTitle: 'OpenAI-compatible site failover chain',
+        sitesHint: 'Only enabled sites listed here are tried, in order. Codex, Grok, Claude, and other CLIs are not used.',
+        addSite: 'Add site',
+        removeSite: 'Remove',
+        moveUp: 'Move up',
+        moveDown: 'Move down',
+        siteName: 'Site name',
+        siteEnabled: 'Enabled',
+        siteEmpty: 'No configured sites. The legacy ModLens provider chain is still used.',
+        chainSaved: 'site chain saved',
+        siteInvalid: 'Each site needs a name, API key, HTTPS/HTTP base URL, and model.',
         pickToConfigure: 'Pick an engine above to configure its key and endpoint.',
         engine: 'Engine',
         apiKey: 'API key',
@@ -216,6 +227,17 @@ window.__ModuleLoader__.load({
         subtitle: '视觉引擎提供商配置。',
         openConfig: '打开配置文件',
         automatic: '自动（不固定，由故障转移链决定）',
+        sitesTitle: 'OpenAI 兼容站点故障转移链',
+        sitesHint: '只会按顺序尝试这里启用的站点，不会使用 Codex、Grok、Claude 等 CLI。',
+        addSite: '添加站点',
+        removeSite: '删除',
+        moveUp: '上移',
+        moveDown: '下移',
+        siteName: '站点名称',
+        siteEnabled: '启用',
+        siteEmpty: '还没有配置站点，将继续使用旧的 ModLens 引擎链。',
+        chainSaved: '站点链已保存',
+        siteInvalid: '每个站点都需要名称、API 密钥、HTTP/HTTPS 接口地址和模型。',
         pickToConfigure: '在上面选一个引擎，才能配置它的密钥和地址。',
         engine: '引擎',
         apiKey: 'API 密钥',
@@ -244,6 +266,49 @@ window.__ModuleLoader__.load({
       return lang.indexOf('zh') === 0 ? TEXT.zh : TEXT.en
     }
 
+    function orderedSiteDraft(summary) {
+      var state = summary && summary.openaiSites ? summary.openaiSites : { sites: [], order: [] }
+      var sites = Array.isArray(state.sites) ? state.sites : []
+      var byId = {}
+      sites.forEach(function (site) {
+        if (site && typeof site.id === 'string') byId[site.id] = Object.assign({}, site, { apiKey: '', keyDirty: false })
+      })
+      var order = Array.isArray(state.order) ? state.order : sites.map(function (site) { return site.id })
+      var result = []
+      order.forEach(function (id) {
+        if (byId[id]) {
+          result.push(byId[id])
+          delete byId[id]
+        }
+      })
+      Object.keys(byId).forEach(function (id) { result.push(byId[id]) })
+      return result
+    }
+
+    function siteDraftPayload(sites) {
+      return (Array.isArray(sites) ? sites : []).map(function (site) {
+        return {
+          id: site.id,
+          name: site.name || '',
+          apiKey: site.keyDirty === true ? site.apiKey || '' : '',
+          keyDirty: site.keyDirty === true,
+          baseUrl: site.baseUrl || '',
+          model: site.model || '',
+          enabled: site.enabled !== false,
+        }
+      })
+    }
+
+    function sitesChanged(summary, sites) {
+      var original = orderedSiteDraft(summary)
+      var next = siteDraftPayload(sites)
+      if (original.length !== next.length) return true
+        return original.some(function (site, index) {
+        var other = next[index]
+        return !other || site.id !== other.id || site.name !== other.name || site.baseUrl !== other.baseUrl || site.model !== other.model || site.enabled !== other.enabled || other.keyDirty === true
+      })
+    }
+
     // The next draft when the engine changes or a summary arrives. The three
     // engine fields belong to the newly selected engine; the reuse grants are
     // the user's pending answers and survive an engine switch, since granting
@@ -259,6 +324,7 @@ window.__ModuleLoader__.load({
         baseUrl: engine.baseUrl,
         model: engine.model,
         reuse: Object.assign({}, keepReuse || summary.reuse),
+        sites: orderedSiteDraft(summary),
       }
     }
 
@@ -268,6 +334,10 @@ window.__ModuleLoader__.load({
     // card loaded back over whatever the file holds now.
     function savePayload(summary, draft) {
       var payload = { reuse: {} }
+      if (sitesChanged(summary, draft.sites)) {
+        payload.openaiSites = siteDraftPayload(draft.sites)
+        payload.openaiSiteOrder = draft.sites.map(function (site) { return site.id })
+      }
       REUSE.forEach((name) => {
         if (draft.reuse[name] !== summary.reuse[name]) {
           payload.reuse[name] = draft.reuse[name]
@@ -396,12 +466,15 @@ window.__ModuleLoader__.load({
           } else {
             var keyless = (summary.keyless || []).indexOf(draft.provider) >= 0
             var current = summary.engines[draft.provider] || { hasKey: false }
+            var hasSiteList = Array.isArray(draft.sites) && draft.sites.length > 0
+            var showLegacyOpenaiFields = draft.provider !== 'openai' || !hasSiteList
             var pristine = seed(summary, draft.provider)
             var dirty =
               draft.provider !== summary.provider ||
               draft.apiKey !== '' ||
               draft.baseUrl !== pristine.baseUrl ||
               draft.model !== pristine.model ||
+              sitesChanged(summary, draft.sites) ||
               REUSE.some((name) => draft.reuse[name] !== summary.reuse[name])
 
             var set = (key, value) => {
@@ -410,6 +483,79 @@ window.__ModuleLoader__.load({
               draftState[1](next)
               noteState[1]('')
             }
+
+            var updateSite = (index, key, value) => {
+              var sites = draft.sites.map(function (site, siteIndex) {
+                return siteIndex === index ? Object.assign({}, site, { [key]: value }) : site
+              })
+              set('sites', sites)
+            }
+            var updateSiteFields = (index, fields) => {
+              var sites = draft.sites.map(function (site, siteIndex) {
+                return siteIndex === index ? Object.assign({}, site, fields) : site
+              })
+              set('sites', sites)
+            }
+            var moveSite = (index, delta) => {
+              var target = index + delta
+              if (target < 0 || target >= draft.sites.length) return
+              var sites = draft.sites.slice()
+              var item = sites.splice(index, 1)[0]
+              sites.splice(target, 0, item)
+              set('sites', sites)
+            }
+            var removeSite = (index) => set('sites', draft.sites.filter(function (_site, siteIndex) { return siteIndex !== index }))
+            var addSite = () => set('sites', draft.sites.concat({
+              id: 'site-' + String(Date.now()).slice(-6),
+              name: '',
+              apiKey: '',
+              baseUrl: '',
+              model: '',
+              enabled: true,
+            }))
+            var siteRows = draft.sites.map(function (site, index) {
+              return h(
+                'div',
+                {
+                  key: site.id + '-' + index,
+                  style: {
+                    border: '1px solid var(--dsw-alias-border-l2, rgba(127,127,127,0.35))',
+                    borderRadius: '10px',
+                    padding: '10px 12px',
+                    marginBottom: '8px',
+                    background: 'var(--dsw-alias-bg-base, rgba(127,127,127,0.04))',
+                  },
+                },
+                h(
+                  'div',
+                  { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' } },
+                  h('input', {
+                    type: 'checkbox',
+                    checked: site.enabled !== false,
+                    onChange: function (event) { updateSite(index, 'enabled', event.target.checked) },
+                  }),
+                  h('strong', { style: { flex: 1, fontSize: '13px' } }, (index + 1) + '. ' + (site.name || t.siteName)),
+                  h('button', { type: 'button', disabled: index === 0, onClick: function () { moveSite(index, -1) }, title: t.moveUp, style: { border: 0, background: 'none', color: 'inherit', cursor: index === 0 ? 'default' : 'pointer', opacity: index === 0 ? 0.35 : 1 } }, '↑'),
+                  h('button', { type: 'button', disabled: index === draft.sites.length - 1, onClick: function () { moveSite(index, 1) }, title: t.moveDown, style: { border: 0, background: 'none', color: 'inherit', cursor: index === draft.sites.length - 1 ? 'default' : 'pointer', opacity: index === draft.sites.length - 1 ? 0.35 : 1 } }, '↓'),
+                  h('button', { type: 'button', onClick: function () { removeSite(index) }, title: t.removeSite, style: { border: 0, background: 'none', color: 'var(--dsw-alias-state-error-primary, #b3261e)', cursor: 'pointer', fontSize: '12px' } }, t.removeSite),
+                ),
+                h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' } },
+                  h(Input, { value: site.name || '', placeholder: t.siteName, onChange: function (event) { updateSite(index, 'name', event.target.value) } }),
+                  h(Input, { type: 'password', value: site.apiKey || '', placeholder: site.hasKey ? t.stored : t.apiKey, onChange: function (event) { updateSiteFields(index, { apiKey: event.target.value, keyDirty: true }) } }),
+                  h(Input, { value: site.baseUrl || '', placeholder: t.baseUrl, onChange: function (event) { updateSite(index, 'baseUrl', event.target.value) } }),
+                  h(Input, { value: site.model || '', placeholder: t.model, onChange: function (event) { updateSite(index, 'model', event.target.value) } }),
+                ),
+              )
+            })
+            var siteChain = fieldRow(
+              h('span', null, t.sitesTitle, h('span', { style: { display: 'block', marginTop: '4px', fontSize: '12px', fontWeight: 400, color: 'var(--dsw-alias-label-tertiary, rgba(127,127,127,0.8))' } }, t.sitesHint)),
+              h('div', null,
+                siteRows.length > 0 ? siteRows : h('div', { style: { fontSize: '13px', color: 'var(--dsw-alias-label-tertiary, rgba(127,127,127,0.8))', padding: '4px 0 8px' } }, t.siteEmpty),
+                h('button', { type: 'button', onClick: addSite, style: { marginTop: '4px', border: '1px solid var(--dsw-alias-border-l2, rgba(127,127,127,0.35))', borderRadius: '8px', padding: '5px 10px', background: 'transparent', color: 'inherit', cursor: 'pointer', font: 'inherit', fontSize: '12px' } }, '+ ' + t.addSite),
+              ),
+              'openai-sites',
+              t.sitesTitle,
+            )
 
             var textField = (label, key, type, placeholder) =>
               fieldRow(
@@ -476,6 +622,7 @@ window.__ModuleLoader__.load({
             body = h(
               'div',
               null,
+              siteChain,
               fieldRow(
                 t.engine,
                 h(
@@ -531,9 +678,11 @@ window.__ModuleLoader__.load({
                       ),
                       'clinote',
                     )
-                  : textField(t.apiKey, 'apiKey', 'password', current.hasKey ? t.stored : t.unset),
-              draft.provider === '' || keyless ? null : textField(t.baseUrl, 'baseUrl', 'text', t.fallback),
-              draft.provider === '' ? null : textField(t.model, 'model', 'text', t.fallback),
+                  : !showLegacyOpenaiFields
+                    ? null
+                    : textField(t.apiKey, 'apiKey', 'password', current.hasKey ? t.stored : t.unset),
+              draft.provider === '' || keyless || !showLegacyOpenaiFields ? null : textField(t.baseUrl, 'baseUrl', 'text', t.fallback),
+              draft.provider === '' || !showLegacyOpenaiFields ? null : textField(t.model, 'model', 'text', t.fallback),
               // Where these values are coming from, said once, because the
               // first save moves them: an engine the file names takes its
               // settings from the file alone.

@@ -20,13 +20,15 @@ const css = {
   heroMeta: { fontSize: 14, color: "var(--dsw-alias-label-tertiary, #6b7280)" },
   lead: { fontSize: 15, lineHeight: 1.7, color: "var(--dsw-alias-label-tertiary, #6b7280)", margin: "0 0 18px" },
   card: {
-    border: "1px solid var(--dsw-alias-border-strong, #e5e7eb)",
-    borderRadius: 10,
-    padding: 18,
+    border: "1px solid color-mix(in srgb, var(--dsw-alias-border-l2, #e5e7eb) 88%, transparent)",
+    borderRadius: 14,
+    padding: "16px 18px 18px",
     marginBottom: 16,
     display: "flex",
     flexDirection: "column",
-    gap: 14
+    gap: 14,
+    background: "color-mix(in srgb, var(--dsw-alias-bg-base, #ffffff) 84%, transparent)",
+    boxShadow: "0 8px 24px rgb(0 0 0 / 0.08), inset 0 1px 0 rgb(255 255 255 / 0.06)"
   },
   row: { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" },
   badge: {
@@ -41,20 +43,27 @@ const css = {
   },
   dot: { width: 9, height: 9, borderRadius: 999, background: "currentColor" },
   hint: { fontSize: 15, lineHeight: 1.7 },
-  grid: { display: "grid", gridTemplateColumns: "minmax(110px, 180px) 1fr", gap: "10px 18px", fontSize: 15 },
+  grid: { display: "grid", gridTemplateColumns: "minmax(110px, 180px) 1fr", gap: "12px 18px", fontSize: 15 },
   key: { color: "var(--dsw-alias-label-tertiary, #6b7280)" },
   val: { wordBreak: "break-word" },
   err: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 14 },
   btn: {
-    padding: "8px 16px",
+    padding: "7px 15px",
     fontSize: 15,
     borderRadius: 8,
     cursor: "pointer",
-    border: "1px solid var(--dsw-alias-border-strong, #e5e7eb)",
-    background: "transparent",
-    color: "inherit"
+    border: "1px solid color-mix(in srgb, var(--dsw-alias-border-l2, #e5e7eb) 88%, transparent)",
+    background: "color-mix(in srgb, var(--dsw-alias-bg-base, #ffffff) 60%, transparent)",
+    color: "inherit",
+    fontWeight: 600
   },
-  foot: { fontSize: 14, lineHeight: 1.7, color: "var(--dsw-alias-label-tertiary, #6b7280)" }
+  foot: {
+    fontSize: 14,
+    lineHeight: 1.7,
+    color: "var(--dsw-alias-label-tertiary, #6b7280)",
+    borderTop: "1px solid color-mix(in srgb, var(--dsw-alias-border-l2, #e5e7eb) 70%, transparent)",
+    paddingTop: 14
+  }
 };
 
 function HeroIcon() {

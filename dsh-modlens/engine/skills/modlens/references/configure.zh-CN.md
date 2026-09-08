@@ -31,6 +31,25 @@ modlens config set <provider>.<field> <value>   # 字段：apiKey、baseUrl、mo
     "denyModels": ["glm-*v*", "deepseek-vl*"],
     "denyWhenUnknown": false
   },
+  "openaiSites": [
+    {
+      "id": "qwen",
+      "name": "Qwen / DashScope",
+      "apiKey": "sk-…",
+      "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "model": "qwen-vl-plus",
+      "enabled": true
+    },
+    {
+      "id": "glm",
+      "name": "GLM",
+      "apiKey": "sk-…",
+      "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
+      "model": "glm-4v",
+      "enabled": true
+    }
+  ],
+  "openaiSiteOrder": ["qwen", "glm"],
   "providers": {
     "antigravity-cli": { "model": "gemini-3.6-flash-low" },
     "gemini-api": {
@@ -58,7 +77,7 @@ modlens config set <provider>.<field> <value>   # 字段：apiKey、baseUrl、mo
 
 字段含义：
 
-- `provider`：不传 `-p` 时由哪个 provider 执行。标准名和别名都行（`agy`/`antigravity` 对应 `antigravity-cli`，`gemini` 对应 `gemini-api`，`openai-compat` 对应 `openai`，`claude` 对应 `anthropic`，`kimi`/`kimi-code` 对应 `kimi-cli`，`claude-code` 对应 `claude-cli`）。留空或缺失表示不钉任何一个：由失败切换链决定，已配置的 API provider 先于 agent CLI 被尝试。
+- `provider`：不传 `-p` 时由哪个 provider 执行。标准名和别名都行（`agy`/`antigravity` 对应 `antigravity-cli`，`gemini` 对应 `gemini-api`，`openai-compat` 对应 `openai`，`claude` 对应 `anthropic`，`kimi`/`kimi-code` 对应 `kimi-cli`，`claude-code` 对应 `claude-cli`）。留空或缺失表示不钉任何一个：由失败切换链决定，已配置的 API provider 先于 agent CLI 被尝试。dsh 中若有启用的 `openaiSites`，图片识别优先使用该站点链。
 - `providers.<name>.<field>`：共六个字段，`apiKey`、`baseUrl`、`model`、`proxy`、`extraBody`、`structuredOutput`（仅 openai 路线）。每个 provider 条目都可选，条目里的每个字段也都可选。别名键同样会被读取（存在 `gemini` 下的设置在解析到 `gemini-api` 时也能找到），冲突时标准键胜出。
 - `providers.<name>.extraBody`：一个 JSON 对象，合并进 API provider（`gemini-api`、`openai`、`anthropic`）的请求体，用来传厂商有而 modlens 没有对应参数的开关。最常见的用途是关掉思考，见下文小节。嵌套对象逐键合并，所以加一个开关不会动到该块里的其他内容。承载图片、提示词和各路线自身强制机制的字段会被拒绝，报错会点名该字段。`openai` 路线上的 `response_format` 不在此列：在那里设置它就是有意替换掉 modlens 本来会发的那份 schema。三个 CLI provider 不发请求体，所以在 `antigravity-cli`、`claude-cli` 或 `kimi-cli` 上运行时它会被忽略，并在 `meta.warnings` 里说明。
 - `providers.openai.structuredOutput`：设为 `true` 时，让 OpenAI 兼容网关自己强制执行视觉契约，以 `response_format: json_schema` 的严格形式发出。默认关闭，因为不支持结构化输出的网关会对这个字段返回 400。你在 `extraBody` 里设的 `response_format` 优先级更高。

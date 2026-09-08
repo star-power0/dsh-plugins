@@ -1,4 +1,34 @@
+## 2026-09-05 — rc.6 Desktop 启动时序修复（discover 的 llm 空值防护）
+
+- **问题**：rc.6 Desktop 加载插件早于 llm 服务初始化；guard `discover()` 同步访问 `ctx.llm.listProviders` 抛 TypeError，导致整个插件加载 fatal（此前被迫整体禁用，连带 model-enhancer 设置页 /modlens-guard/status 404→HTML 报 JSON 解析错误）。
+- **修复**：`guard/index.js` `discover()` 入口加 `if (!ctx || !ctx.llm || typeof ctx.llm.listProviders !== "function") return`；llm 未就绪时跳过，`llm/adapters-updated` 事件会再次触发 discover，模型包装能力不丢。
+- **影响**：仅 1 行防御性修改，产物与升级前版本唯一差异即此行；rc.5/网页端行为不变。
+- **验证**：`node --check` 通过；rc.6 Desktop 实测插件加载成功（/modlens-guard/status state=ready、pluginLoaded=true），CDP 设置页全页 0 错误；`plugin-safety check` 19 插件全绿。
+
+
+## 2026-09-08 — 多模态模型隐藏 modlens_read_image 工具
+
+- **需求**：原生多模态模型也会收到并在请求里调用 `modlens_read_image`，而这个工具本是为「纯文本模型看不见图」准备的，多模态模型调用纯属浪费往返。
+- **改动**：guard 在 `system-prompt/assemble` 瀑布（每 step 组装请求时执行）里按当前模型能力过滤 `assembly.tools`：**原生**多模态模型（目录条目本身声明 `inputModalities` 含 `image`，且不是 modlens 包装）收不到读图工具；`modlens-*` 桥模型即使声明 image 也**保留**工具——它们骨子里是纯文本上游，声明 image 只是为了让带图历史会话过准入，且 visionOnly 开启时桥变体是纯文本用户唯一可见的条目，工具本来就是给它们用的（桥对附件图片仍走自动转写，工具用于读文字里粘贴的路径/URL）；纯文本模型保留；未声明能力（未知）或 resolver 失败一律保留——与 pre-step 图片路由的保守默认一致。判定走未包装 resolver（新增 `modelDeclaresImages` 并导出，`modlens-` 前缀短路放行），不会被 guard 自己为准入安装的 widened resolver 误导；不写 `STATE.lastModelCheck`，诊断字段语义仍归 pre-step 路由所有。工具名跟随 engine `config.toolName`（默认 `modlens_read_image`）。
+- **生效时机**：assemble 每 step 重跑，会话内切换模型后下一步立即生效；仅过滤发生时浅拷贝替换 assembly（`{ ...assembled, tools }`），无过滤时原对象原样返回，`agent-loop` / `dsh-agent` 的下游监听只 spread 不会重建 tools。
+- **回归**：新增 `maintenance/test-modlens-tool-gating.mjs`（10 用例：原生多模态隐藏 / 桥模型声明 image 仍保留 / 声明纯文本保留 / 未知保留 / resolver 抛错保留 / 缺 variables 保留 / 无可过滤原样返回 / 自定义 toolName / 不被 widened resolver 误导 / 不污染诊断）。全部 12 项 `test-modlens-*.mjs` 通过；`plugin-safety check` 19 插件全绿。
+- **生效条件**：host 半改动，需重启 DSH（web / desktop）后生效。
+
+
 # Changelog
+
+## 2026-08-29 - 设置页收拢为单一站点列表，旧配置自动成为第一站点
+
+- 旧的 `providers.openai` 现在动态显示为站点列表第一项 `legacy-openai`（OpenAI（旧配置）），无需重新填写密钥；显式站点按 `openaiSiteOrder` 排在其后，顺序遗漏的有效站点追加到末尾。
+- 站点列表非空时隐藏旧的 OpenAI 单引擎三字段，页面只保留一套站点配置入口；没有站点时旧表单照常显示。
+- 修复站点 API 密钥输入的状态覆盖问题（连续两次草稿更新会丢失新输入的密钥）。
+- 保存站点列表不会删除或改写旧的 `providers.openai`；`legacy-openai` 保存空密钥时自动继承旧配置的密钥。
+
+## 2026-08-29 - 支持多个 OpenAI 兼容站点按顺序故障转移
+
+- 新增 `openaiSites` / `openaiSiteOrder` 配置，可分别保存多个 API 站点的地址、模型和密钥，并按用户顺序依次尝试。
+- 失败、超时、非法响应或视觉结果不完整时继续下一个站点；首个成功立即停止。只调用用户配置的 API 站点，不自动加入 Codex、Grok、Claude、Kimi 或 Antigravity CLI。
+- 设置页支持站点增删、启用/禁用和上下移动；GET 脱敏不返回密钥，旧 `providers.openai` 配置保持兼容；新增本地 mock 回归覆盖顺序、回退、禁用跳过和错误脱敏。
 
 ## 3.18.0 - 2026-08-16
 

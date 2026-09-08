@@ -105,6 +105,20 @@ modlens config set openai.model   qwen3-vl-plus
 
 同样三个键，换成 GLM 开放平台、SiliconFlow、OpenRouter、自建 vLLM/Ollama 或你自己的网关都一样。你常用的视觉模型只要有 OpenAI 兼容 API，ModLens 就能驱动它。
 
+### 多个站点按顺序故障转移（dsh 设置页）
+
+在 DeepSeek Harness 的「视觉引擎（ModLens）」卡片中，可以添加多个 OpenAI 兼容站点。每个站点独立填写名称、接口地址、API 密钥和视觉模型，用上移/下移按钮决定顺序，并可单独停用：
+
+```text
+Qwen / DashScope  →  GLM / 智谱  →  OpenRouter
+```
+
+启用至少一个站点后，dsh 的图片识别只按这条列表尝试：请求失败、超时、返回非法 JSON 或视觉结果不完整，就继续下一个；第一个成功立即停止。这个自定义链只调用你列出的 API 站点，不会把 Codex、Grok、Claude、Kimi 或 Antigravity 等 CLI 混进来。
+
+已有的 `providers.openai` 单引擎配置会自动显示为列表第一项「OpenAI（旧配置）」，无需重新填写密钥；保存站点列表不会删除旧配置，独立运行 ModLens CLI 时它继续可用。站点列表为空时，旧的 ModLens 自动 provider 链保持不变。
+
+配置文件中对应的字段是 `openaiSites` 和 `openaiSiteOrder`，旧的 `providers.openai` 不会被改写。API 密钥只保存在 Host 侧，设置页读取到的只是“已保存”状态。
+
 ### 复用你机器上已有的东西
 
 还有两处现成的视觉能力，一个新 key 都不用配，每家都在你明确同意后才启用：

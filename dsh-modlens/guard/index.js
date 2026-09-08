@@ -18,6 +18,7 @@ import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promise
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { runOpenaiSiteChain, openaiSiteSummary } from "../openai-site-chain.mjs";
 
 const name = "modlens-guard";
 const inject = ["llm", "attachments"];
@@ -102,8 +103,12 @@ const ENGINE_ENV_KEYS = {
   anthropic: ["ANTHROPIC_API_KEY"]
 };
 
+let ACTIVE_CONFIG = {};
+
 const STATE = {
   pluginLoaded: false,
+  openaiSites: { sites: [], order: [], enabled: false },
+  lastSiteRuns: [],
   cliPath: "",
   lastOkAt: null,
   lastFailAt: null,
@@ -313,6 +318,15 @@ function settingsKeysFor(engine) {
   return [...aliases, engine];
 }
 
+function readGuardConfig() {
+  try {
+    const parsed = JSON.parse(readFileSync(modlensConfigPath(), "utf8"));
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 /**
  * Which engines look usable, read from the same two sources a real modlens
  * read uses: ~/.modlens/config.json, and the documented env vars. Never
@@ -351,6 +365,13 @@ function engineState(env = process.env) {
 /** The single state the settings card and the send-guard both read. */
 function currentStatus() {
   const engines = engineState();
+  const siteState = openaiSiteSummary(readGuardConfig());
+  if (siteState.enabled) engines.usable.unshift("openai-sites");
+  const safeSiteState = {
+    enabled: siteState.enabled,
+    order: [...siteState.order],
+    sites: siteState.sites.map(({ id, name, model, hasKey, enabled, valid }) => ({ id, name, model, hasKey, enabled, valid }))
+  };
   const modlens = resolveModlens();
   let state = "ready";
   let reason = "";
@@ -382,6 +403,8 @@ function currentStatus() {
     failures: STATE.failures,
     blocks: STATE.blocks,
     visionProviders: [...STATE.visionProviders],
+    openaiSites: safeSiteState,
+    siteRuns: STATE.lastSiteRuns,
     visionOnly: STATE.visionOnly,
     probeAt: STATE.probeAt,
     probeDurationMs: STATE.probeDurationMs,
@@ -467,6 +490,32 @@ async function modelAcceptsImages(ctx, provider, model) {
       resolverError: sanitize(error instanceof Error ? error.message : error)
     };
     return true;
+  }
+}
+
+/**
+ * Does this model DECLARE image input natively? Unlike modelAcceptsImages(),
+ * unknown capability is NOT treated as multimodal here: hiding the read-image
+ * tool from a possibly text-only model would take away its only way to see an
+ * image, so only an explicit `image` in inputModalities hides the tool.
+ */
+async function modelDeclaresImages(ctx, provider, model) {
+  if (typeof provider !== "string" || typeof model !== "string") return false;
+  // A `modlens-<upstream>` wrapper is a TEXT-ONLY upstream wearing an image
+  // declaration so sessions with image history pass admission. Its wire path
+  // auto-converts attached images, but the read-image tool is still how it
+  // reads a path/URL pasted as text — the tool exists FOR these models, so a
+  // wrapper always keeps it. Only a natively multimodal catalog entry hides.
+  if (provider.startsWith("modlens-")) return false;
+  try {
+    // Same untouched resolver as modelAcceptsImages(): never trust the widened
+    // admission answer this plugin itself installs.
+    const resolve = TRUE_RESOLVERS.get(ctx.llm) ?? ctx.llm.resolveModelInfo.bind(ctx.llm);
+    const info = await resolve.call(ctx.llm, provider, model);
+    const modalities = info?.inputModalities;
+    return Array.isArray(modalities) && modalities.includes("image");
+  } catch {
+    return false;
   }
 }
 
@@ -573,19 +622,32 @@ async function readImageBlock(ctx, block, signal, scope = {}) {
     dir = await mkdtemp(join(tmpdir(), "modlens-guard-"));
     const file = join(dir, `image${ext}`);
     await writeFile(file, Buffer.from(stored.data), { mode: 0o600 });
-    const { stdout, stderr, code } = await runCli(
-      resolveNodeExecutable(),
-      [modlens.cli, "-i", file, "--timeout", String(CLI_TIMEOUT_MS)],
-      signal
-    );
-    if (code !== 0) throw new Error((stderr || stdout).trim() || `modlens CLI exited with code ${code}`);
-    const raw = stdout.trim();
-    if (raw === "") throw new Error("modlens CLI returned no JSON output");
     let parsed;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      throw new Error(`modlens CLI returned invalid JSON: ${raw.slice(-300)}`);
+    if (openaiSiteSummary(readGuardConfig()).enabled) {
+      parsed = await runOpenaiSiteChain({
+        config: readGuardConfig(),
+        cliPath: modlens.cli,
+        nodeExecutable: resolveNodeExecutable(),
+        input: file,
+        timeoutMs: CLI_TIMEOUT_MS,
+        signal
+      });
+      STATE.lastSiteRuns = parsed.meta?.attempts ?? [];
+    } else {
+      const { stdout, stderr, code } = await runCli(
+        resolveNodeExecutable(),
+        [modlens.cli, "-i", file, "--timeout", String(CLI_TIMEOUT_MS)],
+        signal
+      );
+      if (code !== 0) throw new Error((stderr || stdout).trim() || `modlens CLI exited with code ${code}`);
+      const raw = stdout.trim();
+      if (raw === "") throw new Error("modlens CLI returned no JSON output");
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        throw new Error(`modlens CLI returned invalid JSON: ${raw.slice(-300)}`);
+      }
+      STATE.lastSiteRuns = parsed.meta?.attempts ?? [];
     }
     const evidence = `[Image read by the modlens vision bridge]\n${renderEvidence(parsed.result)}`;
     if (cacheKey) {
@@ -654,9 +716,21 @@ async function probeVision(config = {}) {
     dir = await mkdtemp(join(tmpdir(), "modlens-probe-"));
     const file = join(dir, "probe.png");
     await writeFile(file, probeImageBytes(), { mode: 0o600 });
-    const { stdout, stderr, code } = await runCli(resolveNodeExecutable(), [modlens.cli, "-i", file, "--timeout", String(CLI_TIMEOUT_MS)]);
-    if (code !== 0) throw new Error((stderr || stdout).trim() || `modlens CLI exited with code ${code}`);
-    const parsed = JSON.parse(stdout);
+    let parsed;
+    if (openaiSiteSummary(readGuardConfig()).enabled) {
+      parsed = await runOpenaiSiteChain({
+        config: readGuardConfig(),
+        cliPath: modlens.cli,
+        nodeExecutable: resolveNodeExecutable(),
+        input: file,
+        timeoutMs: CLI_TIMEOUT_MS
+      });
+    } else {
+      const { stdout, stderr, code } = await runCli(resolveNodeExecutable(), [modlens.cli, "-i", file, "--timeout", String(CLI_TIMEOUT_MS)]);
+      if (code !== 0) throw new Error((stderr || stdout).trim() || `modlens CLI exited with code ${code}`);
+      parsed = JSON.parse(stdout);
+    }
+    STATE.lastSiteRuns = parsed.meta?.attempts ?? [];
     const meta = parsed?.meta ?? {};
     STATE.probeAt = Date.now();
     STATE.probeDurationMs = Math.max(0, Date.now() - started);
@@ -666,7 +740,13 @@ async function probeVision(config = {}) {
     STATE.lastOkAt = STATE.probeAt;
     STATE.lastError = "";
     persistState();
-    return { ok: true, durationMs: STATE.probeDurationMs, provider: STATE.probeProvider, model: STATE.probeModel };
+    return {
+      ok: true,
+      durationMs: STATE.probeDurationMs,
+      provider: STATE.probeProvider,
+      model: STATE.probeModel,
+      attempts: STATE.lastAttempts
+    };
   } catch (error) {
     STATE.probeAt = Date.now();
     STATE.probeDurationMs = Math.max(0, Date.now() - started);
@@ -814,7 +894,8 @@ function registerVisionAdapter(ctx, config = {}, listUpstream = ctx.llm?.listMod
     }
   };
   const discover = async () => {
-    if (typeof ctx.llm.listProviders !== "function") return;
+    // Desktop rc.6 loads plugins before the llm service; defer until adapters-updated fires.
+    if (!ctx || !ctx.llm || typeof ctx.llm.listProviders !== "function") return;
     for (const info of ctx.llm.listProviders()) {
       const upstream = info?.id;
       if (!upstream || upstream.startsWith("modlens-") || typeof ctx.llm.listModels !== "function") continue;
@@ -853,6 +934,8 @@ const BLOCK_HINT =
   "reason below, and do not guess at the image contents. Reason: ";
 
 function apply(ctx, config = {}) {
+  ACTIVE_CONFIG = config;
+  STATE.openaiSites = openaiSiteSummary(config);
   loadPersistentState(config.root);
   loadVisionOnly(config.root, config);
   loadEvidenceCache(config.root);
@@ -887,13 +970,27 @@ function apply(ctx, config = {}) {
   // Capture the model selected for this assembled request. Agent options can
   // remain stale after a session-local model switch; prompt assembly is the
   // authoritative source used by the host request layer.
+  const readImageToolName = config.toolName || "modlens_read_image";
   ctx.on("system-prompt/assemble", async (assembly, context, next) => {
     const assembled = await next();
     const agent = context?.agent;
     const provider = assembled.variables?.provider;
     const model = assembled.variables?.model;
-    if (agent && typeof provider === "string" && typeof model === "string") {
-      ASSEMBLED_MODELS.set(agent, { provider, model });
+    if (typeof provider === "string" && typeof model === "string") {
+      if (agent) ASSEMBLED_MODELS.set(agent, { provider, model });
+      // The read-image tool exists so TEXT-ONLY models can see images. A
+      // NATIVELY multimodal model must not even see it — calling it is pure
+      // waste. Two keep-it exceptions mirror the router's conservative
+      // defaults: an unknown capability, and a `modlens-*` wrapper (a
+      // text-only upstream wearing an image declaration so image-history
+      // sessions pass admission; the tool is still how it reads a path/URL
+      // pasted as text).
+      if (Array.isArray(assembled.tools) && (await modelDeclaresImages(ctx, provider, model))) {
+        const filtered = assembled.tools.filter((tool) => tool?.name !== readImageToolName);
+        if (filtered.length !== assembled.tools.length) {
+          return { ...assembled, tools: filtered };
+        }
+      }
     }
     return assembled;
   });
@@ -1031,6 +1128,7 @@ export {
   admitImages,
   shouldAdmitForStack,
   modelAcceptsImages,
+  modelDeclaresImages,
   readImageBlock,
   persistentStatePath,
   loadPersistentState,
