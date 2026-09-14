@@ -21,7 +21,7 @@ DeepSeek Harness 本地插件集合，本仓库是 `profiles/plugins` 目录的*
 | dsh-modlens | 视觉 | ModLens 视觉桥 + 图片分流守卫 |
 | dsh-tool-memory-lite | 记忆 | `memory_save` / `memory_read` / `memory_list` / `memory_forget` |
 | dsh-plugin-marketplace | 平台 | 插件市场与安装管理 |
-| dsh-mcp-background | MCP | 7 个 MCP 服务后台连接管理 |
+| dsh-mcp-background | MCP | 7 个 MCP 服务后台连接管理；错峰启动队列（首屏让行 + 单服务 4s 熔断） |
 
 ## 来源与许可（Attribution）
 
