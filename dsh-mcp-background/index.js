@@ -14,6 +14,8 @@ const activeNames = new WeakMap();
 const registries = new WeakMap();
 const MAX_TOOL_NAME = 64;
 const ACTIONS = new Set(["connect", "disconnect", "reconnect", "enable", "disable"]);
+const STARTUP_INITIAL_DELAY_MS = 1500; // Let DSH UI render smoothly first
+const STARTUP_PER_SERVER_CAP_MS = 4000; // Max wait before yielding queue slot to next MCP
 
 function childEnv(extra) {
   const env = { ...process.env };
@@ -82,7 +84,13 @@ async function writeDisabled(file, names) {
 function registryFor(root, disabledFile) {
   let registry = registries.get(root);
   if (registry) return registry;
-  registry = { controllers: new Map(), disabledFile, disabled: new Set(), ready: readDisabled(disabledFile).then((names) => { registry.disabled = names; return names; }) };
+  registry = {
+    controllers: new Map(),
+    disabledFile,
+    disabled: new Set(),
+    ready: readDisabled(disabledFile).then((names) => { registry.disabled = names; return names; }),
+    startupQueue: new Promise((resolve) => setTimeout(resolve, STARTUP_INITIAL_DELAY_MS)),
+  };
   registries.set(root, registry);
   return registry;
 }
@@ -154,7 +162,21 @@ function startBackgroundConnection(ctx, config, registry) {
     async dispose() { disposed = true; await close(); await syncing.catch(() => {}); }
   };
   registry.controllers.set(config.serverName, controller);
-  registry.ready.then(() => { if (registry.disabled.has(config.serverName)) touch("disabled"); else void connect(); });
+  registry.ready.then(() => {
+    if (registry.disabled.has(config.serverName)) {
+      touch("disabled");
+    } else {
+      // Staggered non-blocking startup queue with per-server cap
+      const slot = async () => {
+        if (disposed || manuallyStopped || registry.disabled.has(config.serverName)) return;
+        await Promise.race([
+          connect(),
+          new Promise((resolve) => setTimeout(resolve, STARTUP_PER_SERVER_CAP_MS)),
+        ]).catch(() => {});
+      };
+      registry.startupQueue = registry.startupQueue.then(slot, slot);
+    }
+  });
   return controller;
 }
 
