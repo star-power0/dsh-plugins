@@ -170,6 +170,136 @@ const MESH_SHAPES = [
 	"torus"
 ];
 const FILE_TYPES = ["file", "dir"];
+/**
+* Whitelisted component types (the {@link repairNode} switch). A fence ROOT
+* object carrying one of these types is a bare component root, not the spec
+* envelope — its `items` is the component's own child field. Treating such a
+* root as the envelope used to drop every child and reject the whole fence
+* (upstream #172).
+*/
+const KNOWN_TYPES = /* @__PURE__ */ new Set([
+	"text",
+	"row",
+	"col",
+	"grid",
+	"card",
+	"button",
+	"input",
+	"select",
+	"checkbox",
+	"link",
+	"badge",
+	"stat",
+	"progress",
+	"divider",
+	"list",
+	"table",
+	"chart",
+	"tabs",
+	"avatar",
+	"spacer",
+	"plot",
+	"callout",
+	"steps",
+	"keyvalue",
+	"diff",
+	"json",
+	"code",
+	"radio",
+	"submit",
+	"switch",
+	"slider",
+	"textarea",
+	"accordion",
+	"copy",
+	"mermaid",
+	"scene3d",
+	"timeline",
+	"file-tree",
+	"breadcrumb",
+	"quiz"
+]);
+/**
+* Container types whose root object is already a valid envelope shape: the
+* envelope path reads only `title`/`gap`/`items`/`panel`/`append` and ignores
+* `type`, so a container root passes straight through with NO extra wrapping
+* (no double col, no visual change).
+*/
+const CONTAINER_TYPES = /* @__PURE__ */ new Set([
+	"col",
+	"row",
+	"grid",
+	"card"
+]);
+/**
+* Per-type field aliases: `[writtenField, canonicalField]`. Models intuit
+* `{"type":"keyvalue","items":[…]}` / `{"type":"callout","text":…}` /
+* `{"type":"steps","items":[…]}`; the strict per-branch repairers only accept
+* the canonical fields (`pairs`/`content`/`steps`) and silently DROP the node
+* otherwise — the "banner-only empty block" incident. An alias migrates ONLY
+* when the canonical field is absent, so a real canonical field always wins
+* (behavior aligned with upstream #172/#175, reimplemented on this codebase).
+*/
+const FIELD_ALIASES = {
+	keyvalue: [
+		["items", "pairs"],
+		["rows", "pairs"],
+		["entries", "pairs"]
+	],
+	callout: [["text", "content"], ["body", "content"]],
+	diff: [["items", "diffs"]],
+	quiz: [["title", "question"], ["choices", "options"]],
+	radio: [["items", "options"]],
+	select: [["items", "options"]],
+	steps: [["items", "steps"]],
+	table: [["headers", "columns"]]
+};
+/**
+* Normalize one raw node before its repair branch: migrate aliased fields
+* and canonicalize the `stat` metric group. Fast path returns the SAME
+* object when nothing applies, so clean specs pay zero allocation. Also
+* derives `table.columns` from the first `rows` entry when the model shipped
+* row data without a header row.
+*/
+function normalizeNode(v) {
+	const type = v.type;
+	if (typeof type !== "string") return v;
+	if (type === "stat" && Array.isArray(v.items) && v.items.length > 0 && v.items.every((it) => typeof it === "object" && it !== null)) return {
+		type: "row",
+		items: v.items.map((it) => ({
+			type: "stat",
+			...it
+		}))
+	};
+	const aliases = FIELD_ALIASES[type];
+	let out = null;
+	if (aliases !== void 0) for (const [alias, canonical] of aliases) {
+		if (v[canonical] !== void 0 || v[alias] === void 0) continue;
+		if (out === null) out = { ...v };
+		out[canonical] = out[alias];
+		delete out[alias];
+	}
+	if (type === "radio" || type === "select") {
+		const current = out ?? v;
+		if (Array.isArray(current.options) && current.options.some((o) => typeof o === "object" && o !== null)) {
+			if (out === null) out = { ...v };
+			out.options = current.options.map((o) => {
+				if (typeof o === "string") return o;
+				const label = obj(o)?.label;
+				return label === void 0 ? JSON.stringify(o) : String(label);
+			});
+		}
+	}
+	if (type === "table" && !Array.isArray(v.columns) && Array.isArray(v.rows) && v.rows.length > 0) {
+		const first = v.rows[0];
+		if (Array.isArray(first) && first.length > 0 && first.every((c) => typeof c === "string")) {
+			if (out === null) out = { ...v };
+			out.columns = first;
+			out.rows = out.rows.slice(1);
+		}
+	}
+	return out ?? v;
+}
 /** Walk `list` with the shared node budget; drops invalid entries. */
 function repairItems(list, ctx, depth) {
 	if (!Array.isArray(list)) return [];
@@ -184,8 +314,9 @@ function repairItems(list, ctx, depth) {
 }
 function repairNode(value, ctx, depth) {
 	if (depth > GENUI_LIMITS.maxDepth) return null;
-	const v = obj(value);
-	if (v === void 0) return null;
+	const raw = obj(value);
+	if (raw === void 0) return null;
+	const v = normalizeNode(raw);
 	const type = v.type;
 	if (typeof type !== "string") return null;
 	switch (type) {
@@ -841,19 +972,36 @@ function repairQuizOptions(v) {
 function repairGenuiSpec(value) {
 	const v = obj(value);
 	if (v === void 0) return null;
+	if (typeof v.type === "string" && KNOWN_TYPES.has(v.type)) {
+		if (CONTAINER_TYPES.has(v.type)) return repairSpecEnvelope(v);
+		const wrapped = wrapSingleComponentRoot(normalizeNode(v));
+		return wrapped === null ? null : repairGenuiSpec(wrapped);
+	}
 	if (!Array.isArray(v.items)) {
 		const wrapped = wrapSingleComponentRoot(value);
 		if (wrapped === null) return null;
 		return repairGenuiSpec(wrapped);
 	}
+	return repairSpecEnvelope(v);
+}
+/**
+* The envelope repair path: `value` is (or wraps) the `{title?,gap?,items}`
+* root. Kept separate from {@link repairGenuiSpec} so the root-shape
+* disambiguation can recurse without re-entering itself.
+*/
+function repairSpecEnvelope(v) {
 	const ctx = { remaining: GENUI_LIMITS.maxNodes };
-	return {
+	const items = repairItems(v.items, ctx, 0);
+	const spec = {
 		...opt("title", str(v.title, GENUI_LIMITS.maxString)),
 		...opt("gap", num(v.gap, 0, 96)),
 		...opt("panel", v.panel === true ? true : void 0),
 		...opt("append", v.append === true ? true : void 0),
-		items: repairItems(v.items, ctx, 0)
+		items
 	};
+	const declared = Array.isArray(v.items) ? v.items.length : 0;
+	if (declared > items.length) spec.droppedCount = declared - items.length;
+	return spec;
 }
 /**
 * Count the nodes of a spec tree (every item, descending into tabs /

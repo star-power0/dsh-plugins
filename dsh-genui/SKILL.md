@@ -33,6 +33,8 @@ description: "Render structured interactive UI inline in your reply via the dsh-
 
 字段写错的节点会被渲染器**静默丢弃**（画面上直接缺块），validate_dsh_ui 会对修复后 0 组件的 spec 返回 ❌ 并提示字段名——见到 ❌ 照提示改字段，不要改结构。
 
+**2026-09-16 起渲染器已采纳直觉别名兜底**：`keyvalue` 写成 `items`/`rows`、`callout` 写成 `text`/`body`、`steps` 写成 `items`、`table` 写成 `headers`、`quiz` 写成 `title`/`choices`、`radio`/`select` 写成 `items`、`diff` 写成 `items`，以及 `{"type":"stat","items":[{label,value},…]}` 指标组、`{"type":"steps","items":[…]}` 裸组件根、只给 `rows` 不给 `columns`（首行推导表头）——这些写错**会被自动纠正并渲染**，且部分丢弃时画面顶部会显示黄色警告条。兜底归兜底，**规范字段仍然是首选**（少一层转换、语义无歧义）。
+
 ### 布局
 - text: `{"type":"text","size":"h1|h2|h3|body|muted|caption","content":"...","center":true?}`
 - row / col: `{"type":"row"|"col","items":[...],"wrap":true?,"spacer":true?,"gap":n?}`

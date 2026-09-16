@@ -29,6 +29,14 @@ export interface GenuiSpec {
     append?: boolean;
     /** Root component list. */
     items: GenuiNode[];
+    /**
+     * Local-only: how many top-level nodes repair dropped because of field
+     * defects. Set by {@link repairGenuiSpec} on partially-defective specs; the
+     * renderer shows a compact warning so a partly-empty block is never silent.
+     * Absent on clean specs, and re-repairing a repaired spec never sets it
+     * (idempotency), so the warning disappears once the model fixes the fields.
+     */
+    droppedCount?: number;
 }
 export interface GenuiText {
     type: 'text';

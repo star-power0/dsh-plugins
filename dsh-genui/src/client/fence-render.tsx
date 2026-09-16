@@ -52,6 +52,16 @@ const FENCE_ERROR_STYLE: CSSProperties = {
   whiteSpace: 'pre-wrap',
 }
 
+/** Amber variant for PARTIAL drops: the block renders, but some nodes were
+ * dropped by repair (field defects). Silent partial drops used to look like
+ * a mysteriously empty stretch of UI — never again. */
+const FENCE_WARN_STYLE: CSSProperties = {
+  ...FENCE_ERROR_STYLE,
+  background: 'rgba(245, 158, 11, 0.12)',
+  border: '1px solid rgba(245, 158, 11, 0.4)',
+  color: '#fbbf24',
+}
+
 /**
  * Fallback for a ```dsh-ui fence whose body has no finished component yet.
  * Two very different situations land here and they must not be conflated:
@@ -69,19 +79,29 @@ const FENCE_ERROR_STYLE: CSSProperties = {
  *    marker is gone, surface a compact diagnostic with the parse position so
  *    the defect is visible instead of silent.
  */
-function FenceFallback({ raw, fenceKey }: { raw: string; fenceKey: Key }) {
+function FenceFallback({ raw, fenceKey, allDropped }: { raw: string; fenceKey: Key; allDropped?: boolean }) {
   const ref = useRef<HTMLDivElement | null>(null)
   const [settled, setSettled] = useState(false)
   useLayoutEffect(() => {
     const node = ref.current
     if (node !== null && node.closest('[data-streaming]') === null) setSettled(true)
   })
-  const diagnostic = settled && raw.trim() !== '' ? describeJsonFailure(raw) : null
+  // Two failure shapes share the fallback: a malformed body (JSON parse
+  // position is the useful hint) and a body that parses but yields no
+  // component at all (field-name defects — the JSON is fine, so the usual
+  // "解析失败" wording would mislead).
+  const diagnostic = settled && raw.trim() !== ''
+    ? allDropped === true
+      ? '（JSON 本身合法，但所有组件都因字段名错误被丢弃。常见错误：keyvalue 要 pairs、steps 要 steps、table 要 columns+rows、callout 要 content、stat 每项要 label+value）'
+      : describeJsonFailure(raw)
+    : null
   return (
     <div ref={ref}>
       {diagnostic !== null && (
         <div style={FENCE_ERROR_STYLE} role="alert">
-          ⚠️ dsh-ui fence JSON 解析失败{diagnostic} —— 围栏保持为代码块；请让模型检查并修复 JSON 后重发。
+          {allDropped === true
+            ? <>⚠️ dsh-ui 围栏没有可渲染组件{diagnostic} —— 围栏保持为代码块；请让模型按字段名速查修正后重发。</>
+            : <>⚠️ dsh-ui fence JSON 解析失败{diagnostic} —— 围栏保持为代码块；请让模型检查并修复 JSON 后重发。</>}
         </div>
       )}
       <CodeBlock key={fenceKey} code={`${raw}\n`} lang="dsh-ui" />
@@ -122,6 +142,11 @@ export function resolveGenuiSpec(raw: string, context?: GenuiFenceContext): Genu
 /** The inline GenuiBlock tree for a resolved non-panel spec. */
 function renderInlineFence(key: Key, context: GenuiFenceContext | undefined, spec: GenuiSpec): ReactNode {
   const sessionId = context?.sessionId
+  // Partial-drop diagnostic: repair dropped some top-level nodes (field
+  // defects). Amber note above the surviving block — the defect is visible
+  // without punishing the parts that DO render. Clean specs (and
+  // re-repaired ones) have no droppedCount and pay nothing.
+  const dropped = spec.droppedCount ?? 0
   return (
     // React key carries the stable source identity when present (atomic
     // remount at streaming→settled), falling back to the document key.
@@ -129,6 +154,11 @@ function renderInlineFence(key: Key, context: GenuiFenceContext | undefined, spe
     // tells the user something was wrong — only an unrecoverable body keeps
     // the red diagnostic.
     <ErrorBoundary key={context?.source?.id ?? key} label="该界面">
+      {dropped > 0 && (
+        <div style={FENCE_WARN_STYLE} role="status">
+          ⚠️ {dropped} 个组件因字段名错误未渲染（其余正常显示）。常见错误：keyvalue 要 `pairs`、steps 要 `steps`、table 要 `columns`+`rows`、callout 要 `content`、stat 每项要 `label`+`value`。
+        </div>
+      )}
       <GenuiBlock
         spec={spec}
         // v2.7 durable state: session + stable source + content fingerprint —
@@ -156,6 +186,9 @@ function renderInlineFence(key: Key, context: GenuiFenceContext | undefined, spe
 export function renderResolvedFenceNode(raw: string, key: Key, context?: GenuiFenceContext): ReactNode | null {
   const spec = resolveGenuiSpec(raw, context)
   if (spec === null) return null
+  // Every top-level node was dropped (field defects): an empty block would
+  // be a NEW silent failure mode — keep the stock code block visible instead.
+  if (spec.items.length === 0) return null
   return renderInlineFence(key, context, spec)
 }
 
@@ -167,5 +200,8 @@ export function renderResolvedFenceNode(raw: string, key: Key, context?: GenuiFe
 export function renderGenuiFence(raw: string, key: Key, context?: GenuiFenceContext): ReactNode {
   const spec = resolveGenuiSpec(raw, context)
   if (spec === null) return <FenceFallback key={key} fenceKey={key} raw={raw} />
+  // Parses but yields no component at all (field defects): same fallback
+  // surface, different wording (the JSON is fine — blame the field names).
+  if (spec.items.length === 0) return <FenceFallback key={key} fenceKey={key} raw={raw} allDropped />
   return renderInlineFence(key, context, spec)
 }

@@ -153,6 +153,108 @@ const FILE_TYPES = ['file', 'dir'] as const
 
 /* ---------------- repair ---------------- */
 
+/**
+ * Whitelisted component types (the {@link repairNode} switch). A fence ROOT
+ * object carrying one of these types is a bare component root, not the spec
+ * envelope — its `items` is the component's own child field. Treating such a
+ * root as the envelope used to drop every child and reject the whole fence
+ * (upstream #172).
+ */
+const KNOWN_TYPES: ReadonlySet<string> = new Set([
+  'text', 'row', 'col', 'grid', 'card', 'button', 'input', 'select', 'checkbox',
+  'link', 'badge', 'stat', 'progress', 'divider', 'list', 'table', 'chart',
+  'tabs', 'avatar', 'spacer', 'plot', 'callout', 'steps', 'keyvalue', 'diff',
+  'json', 'code', 'radio', 'submit', 'switch', 'slider', 'textarea',
+  'accordion', 'copy', 'mermaid', 'scene3d', 'timeline', 'file-tree',
+  'breadcrumb', 'quiz',
+])
+
+/**
+ * Container types whose root object is already a valid envelope shape: the
+ * envelope path reads only `title`/`gap`/`items`/`panel`/`append` and ignores
+ * `type`, so a container root passes straight through with NO extra wrapping
+ * (no double col, no visual change).
+ */
+const CONTAINER_TYPES: ReadonlySet<string> = new Set(['col', 'row', 'grid', 'card'])
+
+/**
+ * Per-type field aliases: `[writtenField, canonicalField]`. Models intuit
+ * `{"type":"keyvalue","items":[…]}` / `{"type":"callout","text":…}` /
+ * `{"type":"steps","items":[…]}`; the strict per-branch repairers only accept
+ * the canonical fields (`pairs`/`content`/`steps`) and silently DROP the node
+ * otherwise — the "banner-only empty block" incident. An alias migrates ONLY
+ * when the canonical field is absent, so a real canonical field always wins
+ * (behavior aligned with upstream #172/#175, reimplemented on this codebase).
+ */
+const FIELD_ALIASES: Readonly<Record<string, ReadonlyArray<readonly [string, string]>>> = {
+  keyvalue: [['items', 'pairs'], ['rows', 'pairs'], ['entries', 'pairs']],
+  callout: [['text', 'content'], ['body', 'content']],
+  diff: [['items', 'diffs']],
+  quiz: [['title', 'question'], ['choices', 'options']],
+  radio: [['items', 'options']],
+  select: [['items', 'options']],
+  steps: [['items', 'steps']],
+  table: [['headers', 'columns']],
+}
+
+/**
+ * Normalize one raw node before its repair branch: migrate aliased fields
+ * and canonicalize the `stat` metric group. Fast path returns the SAME
+ * object when nothing applies, so clean specs pay zero allocation. Also
+ * derives `table.columns` from the first `rows` entry when the model shipped
+ * row data without a header row.
+ */
+function normalizeNode(v: Record<string, unknown>): Record<string, unknown> {
+  const type = v.type
+  if (typeof type !== 'string') return v
+  // stat metric group: {"type":"stat","items":[{label,value},…]} → a row of
+  // stat nodes (the canonical multi-metric form) instead of a dropped node
+  // (upstream #172 case A).
+  if (type === 'stat' && Array.isArray(v.items) && v.items.length > 0
+    && v.items.every((it) => typeof it === 'object' && it !== null)) {
+    return {
+      type: 'row',
+      items: v.items.map((it) => ({ type: 'stat', ...(it as Record<string, unknown>) })),
+    }
+  }
+  const aliases = FIELD_ALIASES[type]
+  let out: Record<string, unknown> | null = null
+  if (aliases !== undefined) {
+    for (const [alias, canonical] of aliases) {
+      if (v[canonical] !== undefined || v[alias] === undefined) continue
+      if (out === null) out = { ...v }
+      out[canonical] = out[alias]
+      delete out[alias]
+    }
+  }
+  // radio/select shipped the ask_user_question object shape {label,…}:
+  // flatten objects to their label string so repairStrings can accept them
+  // (upstream PR #43 behavior). Checked against the ALREADY-migrated copy —
+  // the alias step above is what usually produces the options array here.
+  if (type === 'radio' || type === 'select') {
+    const current = out ?? v
+    if (Array.isArray(current.options) && current.options.some((o) => typeof o === 'object' && o !== null)) {
+      if (out === null) out = { ...v }
+      out.options = (current.options as unknown[]).map((o) => {
+        if (typeof o === 'string') return o
+        const label = obj(o)?.label
+        return label === undefined ? JSON.stringify(o) : String(label)
+      })
+    }
+  }
+  // table with row data but no columns: derive them from the first row
+  // (string cells only) so the header is not silently lost (upstream #175).
+  if (type === 'table' && !Array.isArray(v.columns) && Array.isArray(v.rows) && v.rows.length > 0) {
+    const first = v.rows[0]
+    if (Array.isArray(first) && first.length > 0 && first.every((c) => typeof c === 'string')) {
+      if (out === null) out = { ...v }
+      out.columns = first
+      out.rows = (out.rows as unknown[]).slice(1)
+    }
+  }
+  return out ?? v
+}
+
 interface RepairCtx {
   /** Nodes left in the budget; 0 stops the walk. */
   remaining: number
@@ -173,8 +275,9 @@ function repairItems(list: unknown, ctx: RepairCtx, depth: number): GenuiNode[] 
 
 function repairNode(value: unknown, ctx: RepairCtx, depth: number): GenuiNode | null {
   if (depth > GENUI_LIMITS.maxDepth) return null
-  const v = obj(value)
-  if (v === undefined) return null
+  const raw = obj(value)
+  if (raw === undefined) return null
+  const v = normalizeNode(raw)
   const type = v.type
   if (typeof type !== 'string') return null
   switch (type) {
@@ -718,19 +821,47 @@ function repairQuizOptions(v: unknown): Array<{ label: string; correct?: boolean
 export function repairGenuiSpec(value: unknown): GenuiSpec | null {
   const v = obj(value)
   if (v === undefined) return null
+  // Root-shape disambiguation (upstream #172): a root carrying a whitelisted
+  // `type` is a bare COMPONENT root — its `items` is the component's own
+  // child field, not the envelope. Container roots pass straight through
+  // (the envelope path ignores `type`, so no double wrapping); every other
+  // component root normalizes (steps.items → steps …) then wraps into a col.
+  if (typeof v.type === 'string' && KNOWN_TYPES.has(v.type)) {
+    if (CONTAINER_TYPES.has(v.type)) return repairSpecEnvelope(v)
+    const wrapped = wrapSingleComponentRoot(normalizeNode(v))
+    return wrapped === null ? null : repairGenuiSpec(wrapped)
+  }
   if (!Array.isArray(v.items)) {
     const wrapped = wrapSingleComponentRoot(value)
     if (wrapped === null) return null
     return repairGenuiSpec(wrapped)
   }
+  return repairSpecEnvelope(v)
+}
+
+/**
+ * The envelope repair path: `value` is (or wraps) the `{title?,gap?,items}`
+ * root. Kept separate from {@link repairGenuiSpec} so the root-shape
+ * disambiguation can recurse without re-entering itself.
+ */
+function repairSpecEnvelope(v: Record<string, unknown>): GenuiSpec {
   const ctx: RepairCtx = { remaining: GENUI_LIMITS.maxNodes }
-  return {
+  const items = repairItems(v.items, ctx, 0)
+  const spec: GenuiSpec = {
     ...opt('title', str(v.title, GENUI_LIMITS.maxString)),
     ...opt('gap', num(v.gap, 0, 96)),
     ...opt('panel', v.panel === true ? true : undefined),
     ...opt('append', v.append === true ? true : undefined),
-    items: repairItems(v.items, ctx, 0),
+    items,
   }
+  // Partial-drop observability: compare the declared top-level items with
+  // the survivors so a partly-empty block is never silent (the
+  // "banner-only empty block" incident was invisible because repair drops
+  // defect nodes quietly). Idempotent: a repaired spec re-repairs with zero
+  // drops, so the warning disappears once the model fixes the fields.
+  const declared = Array.isArray(v.items) ? v.items.length : 0
+  if (declared > items.length) spec.droppedCount = declared - items.length
+  return spec
 }
 
 /* ---------------- validation ---------------- */
@@ -785,6 +916,16 @@ export function validateGenuiSpec(value: unknown): GenuiValidation {
   const errors: string[] = []
   const v = obj(value)
   if (v === undefined) return { ok: false, errors: ['spec root must be an object'] }
+  // Mirror the renderer's root-shape rule (upstream #172): a bare component
+  // root is a valid fence body — validate through its wrapped form so
+  // validate_dsh_ui agrees with what actually renders. Container-type roots
+  // fall through: the envelope path reads only title/gap/items/panel/append,
+  // exactly like the renderer.
+  if (typeof v.type === 'string' && KNOWN_TYPES.has(v.type) && !CONTAINER_TYPES.has(v.type)) {
+    const wrapped = wrapSingleComponentRoot(normalizeNode(v))
+    if (wrapped === null) return { ok: false, errors: ['spec root is not a valid component'] }
+    return validateGenuiSpec(wrapped)
+  }
   if (!Array.isArray(v.items)) {
     // Single-component root: validate through the wrapped form so the tool
     // agrees with the renderer about what is a valid fence body.
@@ -812,7 +953,10 @@ export function validateGenuiSpec(value: unknown): GenuiValidation {
       }
       count += 1
       const at = `${path}[${i}]`
-      validateNode(list[i], depth, at, errors, walk)
+      // Validate the normalized form so aliased fields (keyvalue items →
+      // pairs, steps items → steps …) pass exactly like they render.
+      const nv = obj(list[i])
+      validateNode(nv === undefined ? list[i] : normalizeNode(nv), depth, at, errors, walk)
     }
   }
   walk(v.items, 0, 'items')

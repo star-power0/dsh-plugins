@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.8.11] - 2026-09-16
+### 修复（上游 #172/#175 行为 cherry-pick，适配本机 rc.6 宿主）
+- **字段别名归一化**：`keyvalue` items/rows/entries→pairs、`callout` text/body→content、`diff` items→diffs、`quiz` title→question + choices→options、`radio`/`select` items→options（对象 `{label}` 拍平为字符串）、`steps` items→steps、`table` headers→columns——写错字段的节点不再被 repair 静默丢弃，照常渲染。当日「战报只剩标题」事故的直接根治。
+- **stat 指标组**：`{"type":"stat","items":[{label,value},…]}` 归一化为一行多个 stat，不再丢弃该节点。
+- **裸组件根**：`{"type":"steps","items":[…]}` 等带白名单 type 的根不再被 items 信封判定误吞——容器根（col/row/grid/card）直通主路径无双包裹，其余组件根归一化后包 col。
+- **table 列名推导**：只给 `rows` 不给 `columns` 时用首行（全字符串）推导表头。
+- **部分丢弃可见**：`repairGenuiSpec` 统计顶级丢弃数（`spec.droppedCount`），渲染器在幸存块顶部挂黄色警告条（N 个组件因字段名错误未渲染 + 字段速查）；全部丢弃时 DOM 通道回退原始代码块、registry 通道挂红色「没有可渲染组件」诊断——静默空白不可能再发生。
+- **validate_dsh_ui 同步**：`validateGenuiSpec` 采纳同一根形状判定与归一化，validate 与渲染行为一致。
+### 性能
+- normalize 快路径零分配（无别名命中返回原引用）；client.js 112,465→115,114 B（+2.6 KB minified）、index.js 42,533→47,050 B；资产懒加载不变；panel/render_ui 接线保持移除（产物 grep：dock/toolview/slash 源三连 False）。
+### 验证
+- tsc 0 error；Node 24 strip-types 行为冒烟 23/23（stat 组/别名/裸根/table 推导/部分丢弃/幂等/validate 一致）；tsdown 四路产物构建成功；plugin-safety check 19 插件双端全绿。改动前存档 `20260916-154057-genui-alias-normalize-patch-*`。需重启 web/desktop 验证。
+- **上游全量升级评估结论**：上游 0.9.9 起明确仅支持 DSH ≥0.1.2-rc.1，本机宿主 0.1.0-rc.6 不在支持范围（fork 点 dab48fa→上游最新差 268 提交/+8906 行重构），故取行为 cherry-pick 而非版本升级；参考实现 upstream `ecb8670`（#172 + #158 诊断）与 `12a7d4f`（#175 别名）。
+
 ## [0.8.10] - 2026-09-16
 ### 修复（历史 #1 静默失败："只剩标题、内容全丢"）
 - **根因链实锤**：模型把 `steps` 的子项字段写成 `items`（正确是 `steps`）、`table` 写成 `headers`（正确是 `columns`）——repair 层对字段不合法的节点**静默丢弃**，而 `validate_dsh_ui` 对修复后 **0 个组件**的 spec 仍然返回 ✅ 放行 → 发出一个渲染出来只有 banner 的空块。复现：`{"items":[{"type":"steps","items":[…]},{"type":"table","headers":[…]}]}` → validate ✅（0 个组件）。
