@@ -1089,6 +1089,13 @@ function bracketDiagnostic(raw) {
 	return diffs.length === 0 ? "" : `  括号计数：${diffs.join("；")}（长表格最易在收尾处错位，如把 ]]}]} 写成 ]}]}]}）\n`;
 }
 const COMMON_CAUSES = "常见原因：① 收尾括号错位/缺失（{ 与 }、[ 与 ] 数量不相等）② 字符串值内用了半角引号 \"（中文引语请用 “” 或 「」）③ 尾随逗号 ④ 字符串未闭合";
+/**
+* Field-name cheat sheet for the nodes the repair pass most often drops.
+* The root spec and most containers use `items`, but steps/table/keyvalue
+* do NOT — the resulting field-name slip renders as an empty banner-only
+* block ("title shows, content gone"), historically the #1 silent failure.
+*/
+const FIELD_HINTS = "字段名速查（容器子项不一定叫 items）：① steps 的子项字段是 \"steps\"（不是 \"items\"），子项用 title/desc ② table 的列名字段是 \"columns\"（不是 \"headers\"），行字段是 \"rows\" ③ keyvalue 的字段是 \"pairs\"（[{key,value}]）④ callout 的语气字段是 \"tone\"（info/success/warning/error，不是 level）⑤ list/tabs/accordion/grid/card/col/row 才用 \"items\" ⑥ quiz 用 question+options，plot 用 series，chart 用 data 或 series";
 /** Build the validate_dsh_ui tool definition. */
 function createValidateDshUiTool() {
 	return {
@@ -1121,7 +1128,12 @@ function createValidateDshUiTool() {
 			}
 			const spec = repairGenuiSpec(parsed);
 			if (spec === null) return "❌ 不是合法 GenUI spec：根对象需要 \"items\" 数组，且每个节点 type 必须在白名单内（见系统提示词）。请修正后重新验证。";
-			return `✅ dsh-ui spec 合法（${countNodes(spec)} 个组件），可以发出围栏。`;
+			const count = countNodes(spec);
+			const rawCount = countGenuiNodes(parsed, GENUI_LIMITS.maxNodes);
+			const dropped = rawCount - count;
+			if (count === 0) return `❌ spec 里没有任何可渲染组件 —— 全部 ${rawCount} 个节点都因字段/结构错误被修复层丢弃（渲染出来只会剩一个空标题）。最常见原因是字段名写错：\n${FIELD_HINTS}\n请按上面的字段名修正后重新调用本工具验证。`;
+			if (dropped > 0) return `⚠️ spec 可用（${count} 个组件），但 ${dropped} 个节点会因字段/结构错误被静默丢弃——发出去的内容会缺块。最常见原因是字段名写错：\n${FIELD_HINTS}\n修正字段后重新验证；确认剩余内容已完整时也可直接发出围栏。`;
+			return `✅ dsh-ui spec 合法（${count} 个组件），可以发出围栏。`;
 		},
 		presentCall() {
 			return {

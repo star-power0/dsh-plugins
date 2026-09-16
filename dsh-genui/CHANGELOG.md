@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.8.10] - 2026-09-16
+### 修复（历史 #1 静默失败："只剩标题、内容全丢"）
+- **根因链实锤**：模型把 `steps` 的子项字段写成 `items`（正确是 `steps`）、`table` 写成 `headers`（正确是 `columns`）——repair 层对字段不合法的节点**静默丢弃**，而 `validate_dsh_ui` 对修复后 **0 个组件**的 spec 仍然返回 ✅ 放行 → 发出一个渲染出来只有 banner 的空块。复现：`{"items":[{"type":"steps","items":[…]},{"type":"table","headers":[…]}]}` → validate ✅（0 个组件）。
+- **`validate_dsh_ui`（src/plugin/tool.ts）**：修复后节点数为 0 → 返回 ❌ 并附字段名速查；部分节点被丢弃（rawCount − repaired > 0）→ 返回 ⚠️ 列出丢弃数量与速查，模型可在发出前自纠。字段对照覆盖 steps/table/keyvalue/callout/quiz/chart/plot/diff/json/code。
+- **SKILL.md**：词汇总览后新增「字段名速查（写错会被静默丢弃）」段——从源头教对字段，`steps`/`table`/`keyvalue`/`callout` 四个易错位单独点名。
+### 验证
+- `tsc -p tsconfig.json` 0 error；`tsdown` 四路产物构建成功（client.js 112465 B 不变、index.js 40947→42533 B）；`lib/index.js` 内「没有任何可渲染组件」❌ 分支与「字段名速查」均确认存在。`plugin-safety check` 19 插件双端全绿。改动前存档 `plugin-snapshots/20260916-102705-fix-validate-zero-nodes-*`。需重启引擎 + 刷新页面后实测一次。
+- 注意：本轮排查曾误判「src 缺 blocks/ 目录」「构建缺组件分发」——前者是目录列表深度截断的误读（types/blocks/*.d.ts 佐证源码在），后者是搜索姿势错误（产物内字符串为反引号模板，`case \`table\`` 形式存在）。产物本身完整。
+
 ## [0.8.9] - 2026-09-06
 ### 移除（应丞相要求）
 - **删除 `render_ui` 工具**：不再向宿主注册把 spec 渲染为工具行卡片的工具；`src/plugin/tool.ts` 移除 `createRenderUiTool` 及其专属辅助（RENDER_UI_* 常量、specOf/unwrapSpec/parseSpecJson/cardTitle 等，validate_dsh_ui 仍用到的 countNodes 保留），`src/plugin/index.ts` 去掉对应 `tools.register` 调用。

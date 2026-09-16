@@ -19,6 +19,20 @@ description: "Render structured interactive UI inline in your reply via the dsh-
 交互：`button` `input` `select` `checkbox` `radio` `switch` `textarea` `tabs` `accordion` `copy`
 高级：`mermaid`（流程图/时序/甘特等）`scene3d`（3D WebGL）`quiz`（点选判题 + 解析 + 重试）
 
+### 字段名速查（写错会被静默丢弃 → 只剩标题的空块）
+
+根节点和大多数容器（row/col/grid/card/list/tabs/accordion/file-tree）用 `items`，但以下组件**不是**：
+
+- `steps`：子项字段是 **`steps`**（不是 items），子项结构 `{"title":"...","desc":"..."}`
+- `table`：列名是 **`columns`**（不是 headers），行是 `rows`，形如 `{"type":"table","columns":["A","B"],"rows":[["1","2"]]}`
+- `keyvalue`：字段是 **`pairs`**，形如 `{"type":"keyvalue","pairs":[{"key":"...","value":"..."}]}`
+- `callout`：语气字段是 **`tone`**（info/success/warning/error，不是 level）+ `title`/`content`
+- `quiz`：`question` + `options`（每项 `{"label":"...","correct":true?,"feedback":"..."}`）
+- `chart`：`data`（或分组时 `series`）；`plot`：`series`
+- `timeline`：`items`（这个是 items）；`diff`：`diffs`；`json`：`value`；`code`：`code`(+`lang`)
+
+字段写错的节点会被渲染器**静默丢弃**（画面上直接缺块），validate_dsh_ui 会对修复后 0 组件的 spec 返回 ❌ 并提示字段名——见到 ❌ 照提示改字段，不要改结构。
+
 ### 布局
 - text: `{"type":"text","size":"h1|h2|h3|body|muted|caption","content":"...","center":true?}`
 - row / col: `{"type":"row"|"col","items":[...],"wrap":true?,"spacer":true?,"gap":n?}`
