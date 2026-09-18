@@ -4,6 +4,7 @@ import { homedir, networkInterfaces } from "node:os";
 import { dirname, join } from "node:path";
 import { toFetchHandler } from "@deepseek-ai/dsh-host-apiproxy";
 import { createServer } from "node:http";
+import { gzipSync } from "node:zlib";
 import { Readable } from "node:stream";
 //#region src/core/types.ts
 /** 运行时默认配置。 */
@@ -866,8 +867,8 @@ const CONTROL_STYLE = `
 const GEAR_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`;
 /** 相机图标（composer 发图入口，同 currentColor 风格）。 */
 const CAMERA_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.8A1.8 1.8 0 0 1 4.8 7h2.3l1.2-1.8c.33-.5.9-.8 1.5-.8h4.4c.6 0 1.17.3 1.5.8L16.9 7h2.3A1.8 1.8 0 0 1 21 8.8v9.4a1.8 1.8 0 0 1-1.8 1.8H4.8A1.8 1.8 0 0 1 3 18.2Z"/><circle cx="12" cy="13.2" r="3.4"/></svg>`;
-/** 已配对控制页（M2）：会话列表 → 消息流 + 发指令 / 中止 / 模型切换。 */
-function renderConnectedPage(deviceName, prefilledCode) {
+/** 已配对控制页（M2）：会话列表 → 消息流 + 发指令 / 中止 / 模型切换。与设备无关（名字前端拉 /remote/me），可协商缓存。 */
+function renderConnectedPage() {
 	return `${BASE_HEAD}
 <style>${CONTROL_STYLE}</style>
 <div id="bar">
@@ -877,7 +878,7 @@ function renderConnectedPage(deviceName, prefilledCode) {
   <button id="newBtn" class="hidden">＋ 新会话</button>
   <button id="refreshBtn" class="hidden">刷新</button>
 </div>
-<div id="devline"><span>设备「${escapeHtml(deviceName)}」</span><span id="connStatus" class="conn-status connecting" role="status" aria-live="polite"><span class="conn-dot"></span><span class="conn-label">连接中</span></span><span>· 页面 v60</span></div>
+<div id="devline"><span id="devName">设备「…」</span><span id="connStatus" class="conn-status connecting" role="status" aria-live="polite"><span class="conn-dot"></span><span class="conn-label">连接中</span></span><span>· 页面 v62</span></div>
 <div id="view"></div>
 <div id="pendBar" class="hidden"></div>
 <div id="skillMenu" class="hidden"></div>
@@ -927,6 +928,7 @@ function renderConnectedPage(deviceName, prefilledCode) {
   var healthTimer = null;
   var healthBusy = false;
   var streamOpen = false;
+  var streamOpenedAt = 0;   // 本次事件流建立时刻：保活帧到达前的僵尸流判定基线
   var healthOnline = false;
   var lastModels = null;
   var lastModelsSid = null; // 模型列表缓存归属的会话：换会话即失效，避免张冠李戴
@@ -975,6 +977,15 @@ function renderConnectedPage(deviceName, prefilledCode) {
       if (!body || body.ok !== true) throw new Error('health rejected');
       healthOnline = true;
       healthFailures = 0;
+      // 僵尸流自愈：网关活着但 35s 无任何帧（保活 20s 一跳）→ 事件流已被
+      // NAT/中间盒静默掐死且浏览器未察觉，主动重建并靠 onopen 全量对账。
+      if (streamOpen && es && Date.now() - Math.max(lastFrameAt, streamOpenedAt) > 35000) {
+        try { es.close(); } catch (e) { }
+        es = null;
+        streamOpen = false;
+        ensureStream();
+        return;
+      }
       syncConnectionState();
     }).catch(function () {
       healthOnline = false;
@@ -1215,6 +1226,7 @@ function renderConnectedPage(deviceName, prefilledCode) {
     es = new EventSource('/remote/events');
     es.onopen = function () {
       streamOpen = true;
+      streamOpenedAt = Date.now();
       syncConnectionState();
       if (current) loadHistory();  // 断线重连后全量对账
     };
@@ -1231,6 +1243,7 @@ function renderConnectedPage(deviceName, prefilledCode) {
       // mux 帧包在 server-request 信封里，真正的帧在 payload 字段（payload.type = session/event 等）
       var frame = f && f.payload;
       if (!frame) return;
+      if (frame.type === 'ping') return;  // 网关保活帧：lastFrameAt 已刷新，不进渲染
       if (frame.type === 'approval/requested' || frame.type === 'question/requested') {
         // 只处置当前正打开的会话；其他会话的审批由桌面端处置
         if (current && frame.sessionId === current.sessionId) {
@@ -2120,12 +2133,78 @@ function renderConnectedPage(deviceName, prefilledCode) {
     }
   }
   /**
-   * dsh-ui 围栏体 → DOM；解析失败、非法 spec、零产出一律返回 null，
-   * 由 fenceBlock 退回代码块（最坏情况不比改动前差）。
+   * Two-tier fence JSON repair, ported from dsh-genui src/shared/fence-repair.ts
+   * so the phone page heals the same classes of model JSON typos as the desktop:
+   * tier-1 (complete=false) heals unescaped half-width quotes inside strings and
+   * trailing commas, safe any time (a streaming half can never parse whole);
+   * tier-2 (complete=true) additionally closes unterminated strings/brackets and
+   * skips mismatched closers, settled messages only so a streaming half is never
+   * adopted as a finished prefix. Adopted only when the whole body parses.
    */
-  function genuiToDom(raw) {
+  function genuiRepairScan(raw, complete) {
+    var out = '';
+    var stack = [];
+    var inString = false;
+    var escaped = false;
+    var repairs = 0;
+    for (var i = 0; i < raw.length; i++) {
+      var ch = raw.charAt(i);
+      if (escaped) { out += ch; escaped = false; continue; }
+      if (inString && ch === '\\\\') { out += ch; escaped = true; continue; }
+      if (ch === '"') {
+        if (!inString) { inString = true; out += ch; continue; }
+        var j = i + 1;
+        while (j < raw.length && (raw.charAt(j) === ' ' || raw.charAt(j) === '\\t' || raw.charAt(j) === '\\n' || raw.charAt(j) === '\\r')) j++;
+        var next = j < raw.length ? raw.charAt(j) : '';
+        if (next === ',' || next === ']' || next === '}' || next === ':' || next === '') { inString = false; out += ch; }
+        else { out += '\\\\"'; repairs++; }
+        continue;
+      }
+      if (inString) { out += ch; continue; }
+      if (ch === '{') { stack.push('}'); out += ch; continue; }
+      if (ch === '[') { stack.push(']'); out += ch; continue; }
+      if (ch === '}' || ch === ']') {
+        if (stack[stack.length - 1] === ch) { stack.pop(); out += ch; }
+        else if (complete) { repairs++; }
+        else return null;
+        continue;
+      }
+      if (ch === ',') {
+        var k = i + 1;
+        while (k < raw.length && (raw.charAt(k) === ' ' || raw.charAt(k) === '\\t' || raw.charAt(k) === '\\n' || raw.charAt(k) === '\\r')) k++;
+        var after = k < raw.length ? raw.charAt(k) : '';
+        if (after === '}' || after === ']' || after === '') { repairs++; continue; }
+      }
+      out += ch;
+    }
+    if (complete) {
+      if (inString) { out += '"'; repairs++; }
+      while (stack.length > 0) { out += stack.pop(); repairs++; }
+    }
+    if (repairs === 0) return null;
+    try { JSON.parse(out); return { text: out, repairs: repairs }; } catch (err) { return null; }
+  }
+  /** Parse the raw body; on failure run tier-1, then tier-2 when settled. */
+  function genuiRepairFence(raw, settled) {
+    try { JSON.parse(String(raw)); return null; } catch (err) { /* fall through to repair */ }
+    var t1 = genuiRepairScan(String(raw), false);
+    if (t1) return t1;
+    if (settled) return genuiRepairScan(String(raw), true);
+    return null;
+  }
+  /**
+   * dsh-ui 围栏体 → DOM；解析失败先走两级修复（仅落定消息启用补闭合），
+   * 仍失败、非法 spec、零产出一律返回 null，由 fenceBlock 退回代码块
+   * （最坏情况不比改动前差）。
+   */
+  function genuiToDom(raw, settled) {
     var spec;
-    try { spec = JSON.parse(String(raw)); } catch (err) { return null; }
+    var rawText = String(raw);
+    try { spec = JSON.parse(rawText); } catch (err) {
+      var fixed = genuiRepairFence(rawText, settled === true);
+      if (!fixed) return null;
+      try { spec = JSON.parse(fixed.text); } catch (err2) { return null; }
+    }
     if (!spec || typeof spec !== 'object' || !Array.isArray(spec.items)) return null;
     // panel:true 是桌面端的面板 dock 指令，手机页没有那个座位：按普通卡片渲染，
     // 免得内容整块消失（桌面端此时 inline 渲染为空是有意的）。
@@ -2142,10 +2221,11 @@ function renderConnectedPage(deviceName, prefilledCode) {
     wrap.appendChild(body);
     return wrap;
   }
-  /** 围栏统一入口：dsh-ui 试走 GenUI，其余（或失败）走代码块。 */
-  function fenceBlock(text, lang) {
+  /** 围栏统一入口：dsh-ui 试走 GenUI，其余（或失败）走代码块。settled 标记
+   *  消息已落定（闭合围栏），未落定只允许 tier-1 修复、不补闭合。 */
+  function fenceBlock(text, lang, settled) {
     if (String(lang || '') === 'dsh-ui') {
-      var node = genuiToDom(text);
+      var node = genuiToDom(text, settled);
       if (node) return node;
     }
     return codeBlock(text);
@@ -2183,7 +2263,7 @@ function renderConnectedPage(deviceName, prefilledCode) {
     for (var li = 0; li < lines.length; li++) {
       var t = lines[li].trim();
       if (inCode) {
-        if (t.indexOf(F3) === 0) { frag.appendChild(fenceBlock(codeBuf.join('\\n'), codeLang)); inCode = false; codeBuf = []; codeLang = ''; }
+        if (t.indexOf(F3) === 0) { frag.appendChild(fenceBlock(codeBuf.join('\\n'), codeLang, true)); inCode = false; codeBuf = []; codeLang = ''; }
         else codeBuf.push(lines[li]);
         continue;
       }
@@ -2206,9 +2286,10 @@ function renderConnectedPage(deviceName, prefilledCode) {
       if (ml) { flushPara(); flushTable(); frag.appendChild(el('div', 'md-li', '')); var liEl = frag.lastChild; inline(liEl, ml[2]); continue; }
       para.push(t);
     }
-    // 未闭合围栏（流式中途）：同样走 fenceBlock —— dsh-ui 的半截 JSON 解析不了，
-    // genuiToDom 会自己退回代码块，与桌面端「解析成功才接管」的语义一致。
-    if (inCode && codeBuf.length) frag.appendChild(fenceBlock(codeBuf.join('\\n'), codeLang));
+    // 未闭合围栏（流式中途）：同样走 fenceBlock，settled=false —— dsh-ui 的半截
+    // JSON 解析不了；tier-1 只在整段可解析时采纳（半截修不出来），tier-2 补闭合
+    // 仅对落定消息启用，流式半截永远不会被当成成品 UI。
+    if (inCode && codeBuf.length) frag.appendChild(fenceBlock(codeBuf.join('\\n'), codeLang, false));
     flushPara(); flushTable();
     return frag;
   }
@@ -3447,6 +3528,13 @@ function renderConnectedPage(deviceName, prefilledCode) {
   // Start the gateway heartbeat on the list page too; no session needs to be open
   // before the phone can tell whether the desktop DSH is reachable.
   startHealthMonitor();
+  // 设备名异步补齐：HTML 与设备无关（可协商缓存），这里只填本设备自己的名字。
+  fetch('/remote/me', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (b) {
+    if (b && b.ok && b.device && b.device.name) {
+      var nameEl = document.getElementById('devName');
+      if (nameEl) nameEl.textContent = '设备「' + b.device.name + '」';
+    }
+  }).catch(function () { });
   showList();
 })();
 <\/script>
@@ -3527,12 +3615,23 @@ function readJsonBody$1(req) {
 		req.on("error", () => resolve(null));
 	});
 }
-function json$1(res, status, body) {
+function json$1(res, status, body, acceptEncoding) {
+	const text = JSON.stringify(body);
+	if (acceptEncoding !== void 0 && acceptEncoding.includes("gzip") && text.length > 1024) {
+		res.writeHead(status, {
+			"content-type": "application/json; charset=utf-8",
+			"cache-control": "no-store",
+			"content-encoding": "gzip",
+			vary: "accept-encoding"
+		});
+		res.end(gzipSync(Buffer.from(text)));
+		return;
+	}
 	res.writeHead(status, {
 		"content-type": "application/json; charset=utf-8",
 		"cache-control": "no-store"
 	});
-	res.end(JSON.stringify(body));
+	res.end(text);
 }
 var RateLimiter = class {
 	buckets = /* @__PURE__ */ new Map();
@@ -3553,6 +3652,18 @@ var RateLimiter = class {
 		return bucket.count <= RATE_LIMIT;
 	}
 };
+/** 已连接页与设备无关（设备名由前端拉 /remote/me）：渲染一次并算好 ETag，进程生命周期内复用。 */
+let connectedPageCache = null;
+function connectedPage() {
+	if (connectedPageCache === null) {
+		const html = renderConnectedPage();
+		connectedPageCache = {
+			html,
+			etag: `"rc-conn-${createHash("sha1").update(html).digest("hex")}"`
+		};
+	}
+	return connectedPageCache;
+}
 async function startGateway(deps) {
 	const { config, pairing, proxy, logger } = deps;
 	const localHostnames = new Set(collectLocalHostnames());
@@ -3592,18 +3703,60 @@ async function startGateway(deps) {
 		}
 		if (req.method === "GET" && rawPath === "/") {
 			const url = new URL(req.url ?? "/", "http://x");
-			const wantsPair = device === null;
-			res.writeHead(200, {
-				"content-type": "text/html; charset=utf-8",
-				"cache-control": "no-store"
-			});
-			res.end(wantsPair ? renderPairPage(url.searchParams.get("code") ?? "", "") : renderConnectedPage(device.name, url.searchParams.get("code") ?? ""));
+			if (device === null) {
+				res.writeHead(200, {
+					"content-type": "text/html; charset=utf-8",
+					"cache-control": "no-store"
+				});
+				res.end(renderPairPage(url.searchParams.get("code") ?? "", ""));
+				return;
+			}
+			const page = connectedPage();
+			if (req.headers["if-none-match"] === page.etag) {
+				res.writeHead(304, { etag: page.etag });
+				res.end();
+				return;
+			}
+			if ((req.headers["accept-encoding"] ?? "").includes("gzip")) {
+				res.writeHead(200, {
+					"content-type": "text/html; charset=utf-8",
+					"cache-control": "no-cache",
+					etag: page.etag,
+					"content-encoding": "gzip",
+					vary: "accept-encoding"
+				});
+				res.end(gzipSync(Buffer.from(page.html)));
+			} else {
+				res.writeHead(200, {
+					"content-type": "text/html; charset=utf-8",
+					"cache-control": "no-cache",
+					etag: page.etag
+				});
+				res.end(page.html);
+			}
 			return;
 		}
 		if (req.method === "GET" && rawPath === "/remote/health") {
 			json$1(res, 200, {
 				ok: true,
 				paired: device !== null
+			});
+			return;
+		}
+		if (req.method === "GET" && rawPath === "/remote/me") {
+			if (device === null) {
+				json$1(res, 401, {
+					ok: false,
+					error: {
+						code: "unauthorized",
+						message: "设备未配对"
+					}
+				});
+				return;
+			}
+			json$1(res, 200, {
+				ok: true,
+				device: { name: device.name }
 			});
 			return;
 		}
@@ -3619,7 +3772,12 @@ async function startGateway(deps) {
 				return;
 			}
 			const ac = new AbortController();
-			res.on("close", () => ac.abort());
+			let keepalive = null;
+			res.on("close", () => {
+				if (keepalive !== null) clearInterval(keepalive);
+				ac.abort();
+			});
+			res.on("error", () => {});
 			try {
 				const upstream = await proxy.openEventStream(ac.signal);
 				if (!upstream.ok || !upstream.body) {
@@ -3636,6 +3794,11 @@ async function startGateway(deps) {
 					"content-type": "text/event-stream",
 					"cache-control": "no-cache"
 				});
+				keepalive = setInterval(() => {
+					try {
+						res.write("data: {\"payload\":{\"type\":\"ping\"}}\n\n");
+					} catch {}
+				}, 2e4);
 				Readable.fromWeb(upstream.body).pipe(res);
 			} catch {
 				if (!res.headersSent) json$1(res, 502, {
@@ -3767,7 +3930,7 @@ async function startGateway(deps) {
 				return;
 			}
 			try {
-				json$1(res, 200, await proxy.call(method, payload));
+				json$1(res, 200, await proxy.call(method, payload), req.headers["accept-encoding"]);
 			} catch (error) {
 				const detail = error instanceof Error ? error.message : String(error);
 				logger.warn(`[dsh-remote-control] RPC ${method} 失败: ${detail}`);

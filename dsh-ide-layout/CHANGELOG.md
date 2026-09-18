@@ -1,3 +1,45 @@
+## 2026-09-18 - 侧栏遮罩双保险（body 级兜底）
+
+### Fixed
+
+- **自愈仍然会漏**：上一次修复靠「节点失联后重查并补打标记」，但
+  `data-ide-tree-overlay-open` 终究挂在**侧栏节点**上，节点一旦被 React 重建、
+  而 observer 又还没跑到（或插件内部状态被别的路径改写），原生侧栏就会重新露出来
+  ——症状与修复前一致（面板正常、底层侧栏文字与文件树重叠）。
+- 兜底方案：`syncSidebarMask()` 同时把状态写到 **`<body>`** 的
+  `data-ide-tree-panel-open` 上；`ide-theme.ts` 增加对应规则
+  `body[data-ide-tree-panel-open] [class*="sidebarCol"] { opacity:0; visibility:hidden; pointer-events:none }`。
+  `<body>` 永不被 shell 替换，因此该规则与节点生命周期无关；资源管理器面板本身是
+  body 的直接子节点、不在侧栏列内，不受影响。
+- 验证（chrome-devtools 宽屏 1524px @ GUI 64773，干净状态 = 用户打开面板）：
+  - 打开面板：`bodyAttr:true / nodeAttr:true / opacity:0 / visibility:hidden`；
+  - 人工 `replaceWith(clone)` 模拟 shell 重挂载：新侧栏 `masked:true / opacity:0`；
+  - **决定性用例**——手动 `removeAttribute('data-ide-tree-overlay-open')` 制造
+    「自愈失效」后立即测量：`bodyAttr:true` 且 `opacity:0 / visibility:hidden`，
+    `bodyFallbackWorks:true`，即兜底单独即可挡住。
+
+## 2026-09-18 - 侧栏遮罩自愈（shell 重挂载后不再失效）
+
+### Fixed
+
+- **资源管理器打开时原生侧栏没被隐藏、文字与文件树叠在一起**（桌面端复现）：
+  `IdeLayoutController.tryAttach()` 把 `frame` 缓存后永不重查——React 整体重建
+  AppFrame 子树（主题/皮肤应用、引导、对话框等）后，`syncSidebarMask()` 一直在给
+  已脱离 DOM 的旧侧栏打 `data-ide-tree-overlay-open`，而挂在 body 上的资源管理器面板
+  与几何测量照常工作，于是症状表现为「面板正常、遮罩静默失效」。
+  - `tryAttach()`：缓存 frame 失联（`!isConnected`）时断开 frame/details observer 并重查。
+  - `syncSidebarMask()`：侧栏节点被换掉时把 ResizeObserver 重新绑到新节点，
+    否则 `sidebarRight` 冻结在旧值（面板宽度也跟着错）。
+  - 新增 `observedSidebar` 记录当前跟踪节点；`dispose()` 一并清空。
+- 复现与验证（chrome-devtools，GUI 64773 宽屏）：打开面板→遮罩 `opacity:0`；
+  人工 `replaceWith(clone)` 模拟 shell 重挂载→修复前新侧栏 `masked:false / opacity:1`，
+  修复后 `masked:true / opacity:0 / visibility:hidden`。
+
+### Changed
+
+- 重新安装 devDependencies（构建前 `node_modules` 只有 14 个目录，tsc/tsdown 缺失；
+  `pnpm install --registry=https://registry.npmmirror.com`），`pnpm build` 通过。
+
 ## 2026-08-23 - 编码选择与 Java / Rust LSP 支持
 
 ### Added

@@ -21,6 +21,19 @@ export const IDE_THEME_CSS = `/* IDE surfaces follow DSH theme tokens so wallpap
   pointer-events: none !important;
 }
 
+/* Body-level twin of the per-node mask above. The per-node attribute lives on
+ * the sidebar element, so a React rebuild of the shell subtree drops it (the
+ * explorer panel keeps working because its host is on <body>, which made the
+ * failure look like "panel fine, native sidebar bleeding through"). <body> is
+ * never replaced, so this rule holds regardless of how the shell re-renders.
+ * The explorer panel itself is NOT matched ([data-ide-sidebar-tree] is a body
+ * child, not inside the sidebar column), so it stays visible. */
+body[data-ide-tree-panel-open] [class*="sidebarCol"] {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 [data-ide-sidebar-tree][data-panel-open='false'] {
   background: transparent;
   border-right: none;

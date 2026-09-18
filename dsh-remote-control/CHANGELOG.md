@@ -1,4 +1,21 @@
 # 更新日志
+0.2.0-dsh-local.33 (2026-09-18) dsh-ui 围栏 JSON 两级自动修复：阻止渲染失败而非提示失败（页面 v62）：
+- 起因：丞相手机上看到 dsh-ui 围栏整块降级为原始 JSON 代码块。排查会话日志实锤根因：模型发出围栏时尾部丢了 `]}` 三个字符，JSON 非法，genuiToDom 按「解析失败退代码块」设计降级——桌面端 dsh-genui 因有 fence-repair 两级修复早已静默修好，两端能力不对等
+- 修复：从 dsh-genui `src/shared/fence-repair.ts` 移植两级修复进手机页（`genuiRepairScan`/`genuiRepairFence`，纯 JS 零依赖）：tier-1（引号内半角引号转义 + 尾逗号删除）任何时候可用——流式半截整段 parse 不过永远不会被采纳；tier-2（补未闭合引号/括号、跳过错配闭合符）仅对落定消息启用（`fenceBlock` 新增 settled 参数：闭合围栏传 true、未闭合围栏传 false），流式半截永远不会被当成成品 UI
+- 语义对齐桌面端：修复成功静默渲染；修不了才退代码块，兜底路径零变化
+- 回归：以 2026-09-18 真实事故 JSON 为永久回归样本（settled 渲染 5 组件、流式半截不采纳）；genui 测试补 6 项修复断言 + 源码契约更新（settled 签名）+ 部署产物 parity 加 `genuiRepairScan` 标记；八项 remote-control 8/8 全绿；产物 node --check 通过；typecheck + build 干净；四个测试的版本断言随 v61→v62 同步
+- 部署：产物已复制进插件目录，**需重启 DSH Desktop 生效**；手机刷新后设备行应显示「页面 v62」。新增 maintenance/test-genui-fence-repair.mjs 固化 dsh-genui 侧修复行为（tier-1/tier-2/事故样本/产物 parity）
+0.2.0-dsh-local.32 (2026-09-17) SSE 保活 + 僵尸流自愈 + 页面缓存友好化（页面 v61）：
+- 起因：丞相反馈「远程控制总掉线」「在外面加载不出来」「发消息过半天要手动刷新」。实测链路：手机 → Cloudflare 边缘（dsh.starroute.me）→ cloudflared QUIC 隧道 → 127.0.0.1:7677 网关
+- 根因一（掉线/发消息无反应）：网关 `/remote/events` 是裸 pipe，SSE 空闲零字节，被 NAT（30s~分钟级回收）或 Cloudflare 免费版 100s 空闲超时静默掐死；客户端 TCP 半开无 RST，EventSource 不触发 onerror 不重连，健康轮询是新请求照样 200——三道防线全是盲区。唯一兜底「发消息后 8s 无帧对账」只在主动发消息时触发
+- 修复一（保活帧）：网关每 20s 写一帧 `{"payload":{"type":"ping"}}`（真帧，客户端可感知），连接 close 时清定时器，`res.on('error')` 兜 EPIPE；空闲连接从此持续有字节流，NAT/CF 都不掐
+- 修复二（僵尸流自愈）：客户端记 `streamOpenedAt`，健康轮询成功时若 `streamOpen && 35s 无任何帧`（保活 20s 一跳，超时即死）→ 主动 `es.close()` + `ensureStream()` 重建，onopen 全量对账兜底；息屏回来 WebView 冻结场景同治。`onmessage` 对 ping 帧直接 return 不进渲染
+- 根因二（加载慢）：已连接页 HTML ~152KB 全内联 + `no-store` 禁缓存，每次打开全量回源重传（CF 代压缩但回源链路省不掉）
+- 修复三（缓存友好化）：`renderConnectedPage()` 去掉 deviceName 入参（设备名改前端拉新增的 `/remote/me`，HTML 与设备无关）；网关侧 memoize 渲染结果 + SHA-1 ETag，命中 `If-None-Match` 回 304 零正文，未命中 gzip 下发（`cache-control: no-cache` 协商缓存，部署新版即时生效；配对页保持 `no-store`）
+- 修复四（RPC 压缩）：`session.history` 等大 JSON（>1KB）按 `accept-encoding` gzip 下发
+- 回归：八项 remote-control 8/8 全绿（status 脚本的启动顺序断言放宽为「monitor 先于 showList，中间允许 /remote/me 拉取」）；页面内联 JS 以 Node 类型剥离真实渲染后 `node --check` 通过；`plugin-safety check` 全通过；typecheck + build 干净
+- 部署：产物已复制进插件目录，**需重启 DSH Desktop 生效**；手机刷新后设备行应显示「页面 v61」。网关流量代价：每 20s 一帧 ~30 字节（约 9KB/小时），手机端无感
+- 遗留：「有时进错会话」尚未定位（丞相暂缓），待复现细节再修；CF 免费节点国内 RTT 是链路底色，若 A+B 上线后仍慢再议局域网直连/优选 IP
 0.2.0-dsh-local.31 (2026-09-06) 修复会话页面「漂移」：锁死 viewport 缩放（页面 v60）：
 - 现象：部分会话页面整体左右偏移、文字被屏幕左缘裁掉、右侧露出 html 底色，连 position:fixed 的输入框/发送按钮都跟着跑位（丞相三张截图实锤）
 - 根因：不是布局 bug，是页面被缩放 + 平移——图3 中 fixed 元素随内容整体跑位是 visual viewport 缩放拖动的签名（文档级横滚移动不了 fixed 元素）。页面 viewport 原本只设 `width=device-width, initial-scale=1`，Android WebView 上快速连点（连按发送/折叠块）或双指捏合即触发放大；放大状态在整个页面生命周期保留（切会话只是 DOM 摘下/贴回，不重置 viewport），所以「有的会话漂、有的不漂」取决于缩放发生时打开的是哪个会话。图2 还证明放大约 1.1x：吸顶标题栏滚出视野、发送按钮被右缘裁掉

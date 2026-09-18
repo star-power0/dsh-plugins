@@ -183,7 +183,43 @@ export function ModelSlider({ locked, available, directory, load, select, t }) {
     requestedRef.current = -1;
   }, [state.current?.model]);
 
+  // 面板定位（见 placePanel 注释）：挂载后量一次，窗口尺寸变化时重算。
+  useEffect(() => {
+    if (!open) return undefined;
+    const place = () => placePanel();
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [open]);
+
   if (!available) return null;
+
+  /**
+   * 面板定位（LOCAL customization, dsh-home）。
+   *
+   * `.panel` 的 CSS 是 `right: 0` 相对 `.root`（宽度 = chip 宽度）对齐的，
+   * 而手机窄屏下 chip 宽度会随模型名长短变化：
+   *   - 模型名短 → chip 右缘落在屏幕中间 → 333px 宽的面板被推到屏幕左侧之外
+   *     （「超出去」）；
+   *   - 模型名长 → chip 右缘贴住屏右缘 → 面板看起来又「正」了。
+   * 于是同一个面板会随模型名长短在「正 / 出去」之间跳。
+   *
+   * 这里在打开时按实测位置一次性把面板平移到视口内（左右各留 8px 边距），
+   * 之后不再重算——避免每帧重算造成的抖动。宽屏（≥1024px）不做平移，
+   * 保持插件原本的右对齐观感。
+   */
+  const placePanel = () => {
+    const panel = rootRef.current?.querySelector(`.${css.panel}`);
+    if (!panel) return;
+    panel.style.transform = "";
+    if (window.innerWidth < 1024) {
+      const rect = panel.getBoundingClientRect();
+      const overflowLeft = 8 - rect.left;
+      const overflowRight = rect.right - (window.innerWidth - 8);
+      const shift = overflowLeft > 0 ? overflowLeft : overflowRight > 0 ? -overflowRight : 0;
+      if (shift !== 0) panel.style.transform = `translateX(${Math.round(shift)}px)`;
+    }
+  };
 
   const show = () => {
     setError(null);

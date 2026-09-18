@@ -11,6 +11,8 @@
  * 防线：全局限流、Host 头校验（DNS rebinding）、令牌 Cookie、方法白名单。
  */
 import { createServer } from 'node:http';
+import { createHash } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
 import { Readable } from 'node:stream';
 import { networkInterfaces } from 'node:os';
 import { REMOTE_METHOD_ALLOWLIST } from "./proxy.js";
@@ -78,9 +80,21 @@ function readJsonBody(req) {
         req.on('error', () => resolve(null));
     });
 }
-function json(res, status, body) {
+function json(res, status, body, acceptEncoding) {
+    const text = JSON.stringify(body);
+    // Large payloads compress: session history over a phone network is the fat one.
+    if (acceptEncoding !== undefined && acceptEncoding.includes('gzip') && text.length > 1024) {
+        res.writeHead(status, {
+            'content-type': 'application/json; charset=utf-8',
+            'cache-control': 'no-store',
+            'content-encoding': 'gzip',
+            vary: 'accept-encoding'
+        });
+        res.end(gzipSync(Buffer.from(text)));
+        return;
+    }
     res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
-    res.end(JSON.stringify(body));
+    res.end(text);
 }
 class RateLimiter {
     buckets = new Map();
@@ -101,6 +115,15 @@ class RateLimiter {
         bucket.count += 1;
         return bucket.count <= RATE_LIMIT;
     }
+}
+/** 已连接页与设备无关（设备名由前端拉 /remote/me）：渲染一次并算好 ETag，进程生命周期内复用。 */
+let connectedPageCache = null;
+function connectedPage() {
+    if (connectedPageCache === null) {
+        const html = renderConnectedPage();
+        connectedPageCache = { html, etag: `"rc-conn-${createHash('sha1').update(html).digest('hex')}"` };
+    }
+    return connectedPageCache;
 }
 export async function startGateway(deps) {
     const { config, pairing, proxy, logger } = deps;
@@ -138,15 +161,46 @@ export async function startGateway(deps) {
         // ---- 公开路由 ----
         if (req.method === 'GET' && rawPath === '/') {
             const url = new URL(req.url ?? '/', 'http://x');
-            const wantsPair = device === null;
-            res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-            res.end(wantsPair
-                ? renderPairPage(url.searchParams.get('code') ?? '', '')
-                : renderConnectedPage(device.name, url.searchParams.get('code') ?? ''));
+            if (device === null) {
+                res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+                res.end(renderPairPage(url.searchParams.get('code') ?? '', ''));
+                return;
+            }
+            // 已连接页与设备无关（设备名由前端拉 /remote/me），协商缓存：
+            // ETag 命中 304 零正文，弱网下二次打开不再重传 ~170KB HTML。
+            const page = connectedPage();
+            if (req.headers['if-none-match'] === page.etag) {
+                res.writeHead(304, { etag: page.etag });
+                res.end();
+                return;
+            }
+            const acceptEnc = req.headers['accept-encoding'] ?? '';
+            if (acceptEnc.includes('gzip')) {
+                res.writeHead(200, {
+                    'content-type': 'text/html; charset=utf-8',
+                    'cache-control': 'no-cache',
+                    etag: page.etag,
+                    'content-encoding': 'gzip',
+                    vary: 'accept-encoding'
+                });
+                res.end(gzipSync(Buffer.from(page.html)));
+            }
+            else {
+                res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache', etag: page.etag });
+                res.end(page.html);
+            }
             return;
         }
         if (req.method === 'GET' && rawPath === '/remote/health') {
             json(res, 200, { ok: true, paired: device !== null });
+            return;
+        }
+        if (req.method === 'GET' && rawPath === '/remote/me') {
+            if (device === null) {
+                json(res, 401, { ok: false, error: { code: 'unauthorized', message: '设备未配对' } });
+                return;
+            }
+            json(res, 200, { ok: true, device: { name: device.name } });
             return;
         }
         // ---- 实时事件流（SSE）：已配对设备 EventSource 直连，客户端断开即中止上游 ----
@@ -156,7 +210,15 @@ export async function startGateway(deps) {
                 return;
             }
             const ac = new AbortController();
-            res.on('close', () => ac.abort());
+            // 保活：空闲时每 20s 写一帧 ping。SSE 空闲零字节会被 NAT 或中间盒
+            // （含 Cloudflare 100s 空闲超时）静默掐死，而客户端对半开连接无从得知。
+            let keepalive = null;
+            res.on('close', () => {
+                if (keepalive !== null)
+                    clearInterval(keepalive);
+                ac.abort();
+            });
+            res.on('error', () => { });
             try {
                 const upstream = await proxy.openEventStream(ac.signal);
                 if (!upstream.ok || !upstream.body) {
@@ -164,6 +226,12 @@ export async function startGateway(deps) {
                     return;
                 }
                 res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
+                keepalive = setInterval(() => {
+                    try {
+                        res.write('data: {"payload":{"type":"ping"}}\n\n');
+                    }
+                    catch { /* 已关闭 */ }
+                }, 20_000);
                 Readable.fromWeb(upstream.body).pipe(res);
             }
             catch {
@@ -246,7 +314,7 @@ export async function startGateway(deps) {
             }
             try {
                 const outcome = await proxy.call(method, payload);
-                json(res, 200, outcome);
+                json(res, 200, outcome, req.headers['accept-encoding']);
             }
             catch (error) {
                 const detail = error instanceof Error ? error.message : String(error);

@@ -61,6 +61,7 @@ export class IdeLayoutController {
   private frame: HTMLElement | null = null
   private chatHandle: HTMLDivElement | null = null
   private sidebarObserver: ResizeObserver | null = null
+  private observedSidebar: HTMLElement | null = null
   private frameObserver: ResizeObserver | null = null
   private detailsObserver: ResizeObserver | null = null
   private footObserver: ResizeObserver | null = null
@@ -79,6 +80,17 @@ export class IdeLayoutController {
 
   mount(): void {
     const tryAttach = (): void => {
+      // React can re-create the whole AppFrame subtree (theme/skin apply,
+      // onboarding, dialogs). A cached detached frame silently pins the mask
+      // to dead nodes while the body-hosted explorer panel keeps working —
+      // so re-find the frame whenever the cached one lost its connection.
+      if (this.frame !== null && !this.frame.isConnected) {
+        this.frameObserver?.disconnect()
+        this.frameObserver = null
+        this.detailsObserver?.disconnect()
+        this.detailsObserver = null
+        this.frame = null
+      }
       if (this.frame === null) {
         const frame = findFrame()
         if (frame === null) return
@@ -197,6 +209,10 @@ export class IdeLayoutController {
 
   private syncSidebarMask(): void {
     const sidebar = this.frame !== null ? findSidebarIn(this.frame) : findSidebar()
+    // Belt-and-braces: the per-node attribute dies with the node (React may
+    // rebuild the shell subtree), so also flag <body> — which is never
+    // replaced — and let the stylesheet hide whatever sidebar exists.
+    document.body.toggleAttribute('data-ide-tree-panel-open', this.treePanelOpen)
     if (this.maskedSidebar !== null && this.maskedSidebar !== sidebar) {
       this.maskedSidebar.removeAttribute('data-ide-tree-overlay-open')
       this.maskedSidebar = null
@@ -204,6 +220,17 @@ export class IdeLayoutController {
     if (sidebar !== null) {
       sidebar.toggleAttribute('data-ide-tree-overlay-open', this.treePanelOpen)
       this.maskedSidebar = this.treePanelOpen ? sidebar : null
+      // A shell remount swaps the sidebar node: re-track geometry on the new
+      // node, otherwise the ResizeObserver watches a detached element and
+      // sidebarRight freezes at its last value.
+      if (sidebar !== this.observedSidebar) {
+        this.observedSidebar = sidebar
+        this.sidebarRight = sidebar.getBoundingClientRect().right
+        if (this.sidebarObserver !== null) {
+          this.sidebarObserver.disconnect()
+          this.sidebarObserver.observe(sidebar)
+        }
+      }
     }
   }
 
@@ -270,6 +297,7 @@ export class IdeLayoutController {
     }
     this.maskedSidebar?.removeAttribute('data-ide-tree-overlay-open')
     this.maskedSidebar = null
+    this.observedSidebar = null
     this.frame = null
     this.sidebarInjected = false
   }

@@ -12,7 +12,10 @@
   align-items: center;
   gap: 4px;
   min-width: 0;
-  max-width: 240px;
+  /* 240px 只是「别太宽」的上限，真正的边界是父容器：长模型名曾撑破它
+     （.root 只有 193px 而 chip 240px，overflow 可见）→ 压住右侧发送按钮。
+     min() 让窄屏按可用宽度收敛，宽屏仍是 240px 上限。 */
+  max-width: min(240px, 100%);
   height: 28px;
   padding: 0 4px 0 8px;
   border: none;
@@ -74,12 +77,17 @@
 /* 弹出面板与内置菜单同材质 */
 .panel {
   position: absolute;
+  /* `right: 0` 相对 .root（chip 的包裹层，宽度 = chip 宽度）对齐：模型名短时
+     chip 右缘落在屏幕中间，333px 宽的面板被推到屏幕左侧之外；模型名长时 chip
+     右缘贴住屏右缘，看着又「正」了 —— 这就是「有时正、有时出去」的跳变来源。
+     这里解除面板宽度对 chip 位置的依赖：面板宽度收敛到「视口 − 16px」以内，
+     并由 JS 按实测位置平移（见 ModelSlider.jsx 的 placePanel），保证始终贴视口。 */
   right: 0;
   bottom: calc(100% + 8px);
   z-index: 20;
   display: flex;
   flex-direction: column;
-  width: min(320px, calc(100vw - 32px));
+  width: min(320px, calc(100vw - 16px));
   max-height: min(480px, calc(100vh - 96px));
   overflow: hidden;
   padding: 6px;

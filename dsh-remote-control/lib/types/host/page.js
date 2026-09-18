@@ -655,8 +655,8 @@ const CONTROL_STYLE = `
 const GEAR_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`;
 /** 相机图标（composer 发图入口，同 currentColor 风格）。 */
 const CAMERA_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.8A1.8 1.8 0 0 1 4.8 7h2.3l1.2-1.8c.33-.5.9-.8 1.5-.8h4.4c.6 0 1.17.3 1.5.8L16.9 7h2.3A1.8 1.8 0 0 1 21 8.8v9.4a1.8 1.8 0 0 1-1.8 1.8H4.8A1.8 1.8 0 0 1 3 18.2Z"/><circle cx="12" cy="13.2" r="3.4"/></svg>`;
-/** 已配对控制页（M2）：会话列表 → 消息流 + 发指令 / 中止 / 模型切换。 */
-export function renderConnectedPage(deviceName, prefilledCode) {
+/** 已配对控制页（M2）：会话列表 → 消息流 + 发指令 / 中止 / 模型切换。与设备无关（名字前端拉 /remote/me），可协商缓存。 */
+export function renderConnectedPage() {
     return `${BASE_HEAD}
 <style>${CONTROL_STYLE}</style>
 <div id="bar">
@@ -666,7 +666,7 @@ export function renderConnectedPage(deviceName, prefilledCode) {
   <button id="newBtn" class="hidden">＋ 新会话</button>
   <button id="refreshBtn" class="hidden">刷新</button>
 </div>
-<div id="devline"><span>设备「${escapeHtml(deviceName)}」</span><span id="connStatus" class="conn-status connecting" role="status" aria-live="polite"><span class="conn-dot"></span><span class="conn-label">连接中</span></span><span>· 页面 v60</span></div>
+<div id="devline"><span id="devName">设备「…」</span><span id="connStatus" class="conn-status connecting" role="status" aria-live="polite"><span class="conn-dot"></span><span class="conn-label">连接中</span></span><span>· 页面 v61</span></div>
 <div id="view"></div>
 <div id="pendBar" class="hidden"></div>
 <div id="skillMenu" class="hidden"></div>
@@ -716,6 +716,7 @@ export function renderConnectedPage(deviceName, prefilledCode) {
   var healthTimer = null;
   var healthBusy = false;
   var streamOpen = false;
+  var streamOpenedAt = 0;   // 本次事件流建立时刻：保活帧到达前的僵尸流判定基线
   var healthOnline = false;
   var lastModels = null;
   var lastModelsSid = null; // 模型列表缓存归属的会话：换会话即失效，避免张冠李戴
@@ -764,6 +765,15 @@ export function renderConnectedPage(deviceName, prefilledCode) {
       if (!body || body.ok !== true) throw new Error('health rejected');
       healthOnline = true;
       healthFailures = 0;
+      // 僵尸流自愈：网关活着但 35s 无任何帧（保活 20s 一跳）→ 事件流已被
+      // NAT/中间盒静默掐死且浏览器未察觉，主动重建并靠 onopen 全量对账。
+      if (streamOpen && es && Date.now() - Math.max(lastFrameAt, streamOpenedAt) > 35000) {
+        try { es.close(); } catch (e) { }
+        es = null;
+        streamOpen = false;
+        ensureStream();
+        return;
+      }
       syncConnectionState();
     }).catch(function () {
       healthOnline = false;
@@ -1004,6 +1014,7 @@ export function renderConnectedPage(deviceName, prefilledCode) {
     es = new EventSource('/remote/events');
     es.onopen = function () {
       streamOpen = true;
+      streamOpenedAt = Date.now();
       syncConnectionState();
       if (current) loadHistory();  // 断线重连后全量对账
     };
@@ -1020,6 +1031,7 @@ export function renderConnectedPage(deviceName, prefilledCode) {
       // mux 帧包在 server-request 信封里，真正的帧在 payload 字段（payload.type = session/event 等）
       var frame = f && f.payload;
       if (!frame) return;
+      if (frame.type === 'ping') return;  // 网关保活帧：lastFrameAt 已刷新，不进渲染
       if (frame.type === 'approval/requested' || frame.type === 'question/requested') {
         // 只处置当前正打开的会话；其他会话的审批由桌面端处置
         if (current && frame.sessionId === current.sessionId) {
@@ -3236,6 +3248,13 @@ export function renderConnectedPage(deviceName, prefilledCode) {
   // Start the gateway heartbeat on the list page too; no session needs to be open
   // before the phone can tell whether the desktop DSH is reachable.
   startHealthMonitor();
+  // 设备名异步补齐：HTML 与设备无关（可协商缓存），这里只填本设备自己的名字。
+  fetch('/remote/me', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (b) {
+    if (b && b.ok && b.device && b.device.name) {
+      var nameEl = document.getElementById('devName');
+      if (nameEl) nameEl.textContent = '设备「' + b.device.name + '」';
+    }
+  }).catch(function () { });
   showList();
 })();
 </script>
