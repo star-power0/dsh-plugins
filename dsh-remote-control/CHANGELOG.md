@@ -1,4 +1,9 @@
 # 更新日志
+
+2026-09-19 文档：README 修正 + 补 LICENSE
+- README「移动页版本标记」由过期的 v60 更正为 **v62**（2026-09-18 dsh-ui 围栏 JSON 两级自动修复），并新增 License 小节。
+- 新增 `LICENSE`（MIT）：上游 myzane678/dsh-remote-control 版权 + 本地改动版权双声明。此前本插件是仓库中唯一缺 LICENSE 文件的目录。
+
 0.2.0-dsh-local.33 (2026-09-18) dsh-ui 围栏 JSON 两级自动修复：阻止渲染失败而非提示失败（页面 v62）：
 - 起因：丞相手机上看到 dsh-ui 围栏整块降级为原始 JSON 代码块。排查会话日志实锤根因：模型发出围栏时尾部丢了 `]}` 三个字符，JSON 非法，genuiToDom 按「解析失败退代码块」设计降级——桌面端 dsh-genui 因有 fence-repair 两级修复早已静默修好，两端能力不对等
 - 修复：从 dsh-genui `src/shared/fence-repair.ts` 移植两级修复进手机页（`genuiRepairScan`/`genuiRepairFence`，纯 JS 零依赖）：tier-1（引号内半角引号转义 + 尾逗号删除）任何时候可用——流式半截整段 parse 不过永远不会被采纳；tier-2（补未闭合引号/括号、跳过错配闭合符）仅对落定消息启用（`fenceBlock` 新增 settled 参数：闭合围栏传 true、未闭合围栏传 false），流式半截永远不会被当成成品 UI

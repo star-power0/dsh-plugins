@@ -65,8 +65,13 @@ dsh-remote-control 是 DeepSeek Harness 的手机远程控制插件：手机浏�
 
 ## 移动页版本标记
 
-每轮迭代在页面底部标记 `页面 vNN`，当前移动页 = **页面 v60**（2026-09-06，锁 viewport 缩放修「漂移」）。每轮逐条变更见本目录 `CHANGELOG.md`。
+每轮迭代在页面底部标记 `页面 vNN`，当前移动页 = **页面 v62**（2026-09-18，dsh-ui 围栏 JSON
+两级自动修复）。每轮逐条变更见本目录 `CHANGELOG.md`。
 
 ## 入口
 
 `lib/index.js`（host：网关 + `/remote-control/*` 回环管理面）、`lib/client.js`（client：设置页分区）。改 host 半需重启 DSH，页面版本号可用来确认新版是否生效。
+
+## License
+
+MIT（继承自上游）。上游版权声明与本地改动版权声明见本目录 `LICENSE`；本地改动同样以 MIT 释出。
