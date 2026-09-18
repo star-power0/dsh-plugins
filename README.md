@@ -22,6 +22,10 @@ DeepSeek Harness 本地插件集合，本仓库是 `profiles/plugins` 目录的*
 | dsh-tool-memory-lite | 记忆 | `memory_save` / `memory_read` / `memory_list` / `memory_forget` |
 | dsh-plugin-marketplace | 平台 | 插件市场与安装管理 |
 | dsh-mcp-background | MCP | 7 个 MCP 服务后台连接管理；错峰启动队列（首屏让行 + 单服务 4s 熔断） |
+| dsh-client-ui-custom | 主题 | 客制化外观：壁纸 / 毛玻璃 / 强调色、快捷键、用量统计、动效 |
+| dsh-talk-map | 界面 | 可视化对话地图：会话即白板卡片，拖拽排布、画边 fork 注入上下文 |
+| dsh-remote-control | 手机 | 手机远程控制：配对码接入，看会话 / 发指令 / 切模型与档位 |
+| dsh-pocket | 手机 | 手机同屏镜像：局域网 + 公网访问同一 DSH 实例，含手机窄屏适配 |
 
 ## 来源与许可（Attribution）
 
@@ -45,6 +49,10 @@ DeepSeek Harness 本地插件集合，本仓库是 `profiles/plugins` 目录的*
 | dsh-native-session-window | 原创 | — | MIT |
 | dsh-workspace-picker | 原创 | — | MIT |
 | dsh-mcp-background | 原创 | — | MIT |
+| dsh-client-ui-custom | [Yoli-mi/dsh-client-ui-custom](https://github.com/Yoli-mi/dsh-client-ui-custom)（`@ha-na-bi/dsh-client-ui-custom`） | MIT | 本地构建链（自研 `build.mjs`）；文字颜色调节、玻璃档位联动修复、设置页视觉层次 |
+| dsh-talk-map | [Tasihi89/dsh-talk-map](https://github.com/Tasihi89/dsh-talk-map) | MIT | 固定 commit `b2d36d6`（= v0.1.0）；本地增强：会话卡片自动同步（local.1/local.2） |
+| dsh-remote-control | [myzane678/dsh-remote-control](https://github.com/myzane678/dsh-remote-control) | MIT | 固定 commit `ca297b3`（= v0.2.0）；大幅本地增强：配对认证、手机布局、SSE 保活、页面 v62 围栏修复 |
+| dsh-pocket | [shaobeichen/dsh-pocket](https://github.com/shaobeichen/dsh-pocket) | GPL-2.0 | npm `2.10.6` tarball 接入；5 项本地定制 + 手机窄屏全套修复（详见 `LOCAL.md`） |
 
 ## 开发约定
 
