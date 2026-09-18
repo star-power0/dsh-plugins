@@ -1016,17 +1016,27 @@ html[data-dsh-float][data-dsh-aqua-wallpaper][data-dsh-aqua-media='video'] body[
 }
 
 /* ---------- Popup readability fix (model picker / access mode / slash
-   commands). Stock glass fills (45-55% alpha) let the wallpaper/fluid bleed
-   through behind plain text; these three popups get a near-opaque frosted
-   fill. Anchors use CSS-module LOCAL names (modelList / sideTop / menu),
-   which survive rebuilds — never the hashed prefix. The model-picker dialog
-   is matched only through its role="menu" list: the settings page reuses the
-   same `_modelList` local class WITHOUT a menu role, so a bare `[class*=
-   '_modelList']` anchor would glass over the settings editor cards too. ---------- */
+   commands / hero mode + workspace pickers). Stock glass fills (45-55% alpha)
+   let the wallpaper/fluid bleed through behind plain text; these popups get a
+   near-opaque frosted fill. Anchors use CSS-module LOCAL names (modelList /
+   sideTop / portal / menu), which survive rebuilds — never the hashed prefix.
+   The model-picker dialog is matched only through its role="menu" list: the
+   settings page reuses the same `_modelList` local class WITHOUT a menu role,
+   so a bare `[class*= '_modelList']` anchor would glass over the settings
+   editor cards too.
+
+   Cover EVERY container variant of the family at once — the hero "mode" and
+   "workspace" pickers use _portal_, which the first cut missed, so they alone
+   stayed translucent. The family has six:
+   _list_ / _submenu_ / _sideTop_ / _portal_ / _compactList_ / _denseList_. */
 [data-dsh-aqua] :is(
   [role='dialog']:has([role='menu'][class*='_modelList']),
   [role='menu'][class*='_modelList'],
   [role='menu'][class*='_sideTop_'],
+  [role='menu'][class*='_portal_'],
+  [role='menu'][class*='_submenu_'],
+  [role='menu'][class*='_compactList_'],
+  [role='menu'][class*='_denseList_'],
   [role='listbox'][class*='_menu']
 ) {
   background: rgb(255 255 255 / 0.94) !important;
@@ -1040,6 +1050,10 @@ html[data-dsh-float][data-dsh-aqua-wallpaper][data-dsh-aqua-media='video'] body[
   [role='dialog']:has([role='menu'][class*='_modelList']),
   [role='menu'][class*='_modelList'],
   [role='menu'][class*='_sideTop_'],
+  [role='menu'][class*='_portal_'],
+  [role='menu'][class*='_submenu_'],
+  [role='menu'][class*='_compactList_'],
+  [role='menu'][class*='_denseList_'],
   [role='listbox'][class*='_menu']
 ) {
   background: rgb(22 26 34 / 0.94) !important;

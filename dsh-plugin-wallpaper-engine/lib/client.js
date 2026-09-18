@@ -1179,18 +1179,30 @@ window.__ModuleLoader__.load({
 		    backdrop-filter: blur(var(--we-blur, 24px)) saturate(var(--we-saturate, 1.6)) brightness(1.05);
 		  }
 
-		  /* ── Popup readability fix (model picker / access mode / slash commands) ───
-		     These three popups sit on translucent glass over the wallpaper and their
-		     stock 55%-alpha fill lets the wallpaper bleed through behind plain text.
-		     Anchors use the CSS-module LOCAL names (modelList / sideTop / menu), which
-		     survive rebuilds — never the hashed prefix. The model-picker dialog is
-		     matched only through its role="menu" list: the settings page reuses the
-		     same _modelList local class WITHOUT a menu role, so a bare [class*=
-		     "_modelList"] anchor would glass over the settings editor cards too. */
+		  /* ── Popup readability fix ─────────────────────────────────────────────────
+		     Every popup of the official _19372_ family reads its fill from
+		     --dsw-specific-menu, which this engine rewrites to a 55%-alpha glass so
+		     the wallpaper shows through. Plain text on that fill is hard to read over
+		     a busy wallpaper, so each container gets a near-opaque frosted fill.
+		     Anchors use the CSS-module LOCAL names (modelList / sideTop / portal /
+		     menu), which survive rebuilds — never the hashed prefix. The model-picker
+		     dialog is matched only through its role="menu" list: the settings page
+		     reuses the same _modelList local class WITHOUT a menu role, so a bare
+		     [class*="_modelList"] anchor would glass over the settings editor cards.
+
+		     Cover EVERY container variant of the family at once — the hero "mode"
+		     and "workspace" pickers use _portal_, which the first cut of this fix
+		     missed, so they alone stayed translucent. The family has six:
+		     _list_ / _submenu_ / _sideTop_ / _portal_ / _compactList_ / _denseList_.
+		     Fixing only the variant you saw always misses the rest. */
 		  body[data-we-wallpaper] :is(
 		    [role="dialog"]:has([role="menu"][class*="_modelList"]),
 		    [role="menu"][class*="_modelList"],
 		    [role="menu"][class*="_sideTop_"],
+		    [role="menu"][class*="_portal_"],
+		    [role="menu"][class*="_submenu_"],
+		    [role="menu"][class*="_compactList_"],
+		    [role="menu"][class*="_denseList_"],
 		    [role="listbox"][class*="_menu"]
 		  ) {
 		    background: rgba(255, 255, 255, 0.94) !important;
@@ -1203,6 +1215,10 @@ window.__ModuleLoader__.load({
 		    [role="dialog"]:has([role="menu"][class*="_modelList"]),
 		    [role="menu"][class*="_modelList"],
 		    [role="menu"][class*="_sideTop_"],
+		    [role="menu"][class*="_portal_"],
+		    [role="menu"][class*="_submenu_"],
+		    [role="menu"][class*="_compactList_"],
+		    [role="menu"][class*="_denseList_"],
 		    [role="listbox"][class*="_menu"]
 		  ) {
 		    background: rgba(22, 26, 34, 0.94) !important;

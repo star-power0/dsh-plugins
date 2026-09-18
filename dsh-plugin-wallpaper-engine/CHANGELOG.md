@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-09-19 - 弹窗可读性修复补全：模式/工作区弹层（_portal_ 变体）
+
+- 症状（丞相报告）：新建会话页的「模式选择」与「工作区选择」弹层半透明，壁纸透过弹层与文字重叠、看不清；而模型选择与权限弹层是清楚的。要求「和模型的选择和那个权限一样，不要透明的，深色浅色都搞定，无论皮肤壁纸外观怎么变」。
+- 根因：官方 `_19372_` 弹层家族的填充读 `--dsw-specific-menu`，本引擎把它改写成 55% 玻璃（浅色 `rgba(255,255,255,0.55)` / 深色 `rgba(16,21,29,0.55)`）。09-08 的「弹窗可读性修复」只覆盖了模型选择器（`_modelList`）、访问模式（`_sideTop_`）、斜杠菜单（`_menu`）三处 —— **漏了 `_portal_` 变体**，而 hero 页的「模式」「工作区」两个选择器正是 `_portal_`。
+- 修复：把该家族**全部六种容器变体**一次覆盖 —— `_list_` / `_submenu_` / `_sideTop_` / `_portal_` / `_compactList_` / `_denseList_`（外加原有的 `_modelList` 与 `[role="listbox"][class*="_menu"]`），浅色 `rgba(255,255,255,0.94)` + `backdrop-filter: blur(24px) saturate(1.4)`，深色 `rgba(22,26,34,0.94)`，均 `!important`。
+- 同步补 aqua（壁纸未开时的同类场景）：`dsh-client-ui-aqua/src/client/aqua.module.css` 同款六变体扩展。
+- 验证（chrome-devtools @9223 + desktop-mode 参数，1524px）：
+  - 四个弹层全部 0.94 + blur(24px)：模式/工作区（`_portal_`）、权限（`_sideTop_`）、模型（`_modelList`）；斜杠菜单（`_3e4SsG_menu`）经既有 `[role="listbox"][class*="_menu"]` 规则同样 0.94。
+  - 深色：`rgba(22, 26, 34, 0.94)`，逐项核对通过；截图确认浅色/深色两种模式下文字均清晰。
+  - 桌面端其余 UI 无变化（规则只命中 `role=menu/listbox/dialog` 的弹层容器）。
+- 踩坑规避：本次注释改写时避开了反引号（09-08 那次因注释内反引号截断模板字符串，导致全站插件加载失败）。`lib/client.js` 重建后 `node --check` 通过（0 错误）。
+
 ## 2026-09-08 - CSS 注释反引号导致 client.js 语法错误 / 全站插件加载失败修复
 
 - 症状（丞相报告「dsh 打不开了，修坏了」）：web 3080 首页 HTTP 200 但整页白屏，仅 "Failed to load plugins"；控制台主错误 `Uncaught SyntaxError: Unexpected identifier '_modelList'`（定位 index-Dqw48FrP.js 内嵌的 wallpaper-engine bundle），连锁报 `bundle loaded without registering "dsh-plugin-wallpaper-engine" via __ModuleLoader__.load`，所有插件注册链全断。

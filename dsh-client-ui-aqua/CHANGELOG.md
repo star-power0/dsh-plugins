@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-09-19 - 弹窗可读性修复补全：模式/工作区弹层（_portal_ 变体）
+
+- 起因：丞相报告新建会话页的「模式选择」与「工作区选择」弹层半透明、壁纸透出压字（模型选择与权限弹层则正常），要求一并做成不透明。
+- 根因：官方 `_19372_` 弹层家族填充读 `--dsw-specific-menu`；本插件的玻璃模式把它改成半透明。此前（09-08）的弹窗可读性修复只列了 `_modelList` / `_sideTop_` / `_menu` 三种，漏了 `_portal_` —— hero 页的「模式」「工作区」正是该变体。
+- 修复：`src/client/aqua.module.css` 的弹窗可读性块扩展为**家族全部六种容器变体**（`_list_` / `_submenu_` / `_sideTop_` / `_portal_` / `_compactList_` / `_denseList_`），浅色 `rgb(255 255 255 / 0.94)` + `backdrop-filter: blur(24px) saturate(1.4)`，深色 `rgb(22 26 34 / 0.94)`，均 `!important`。
+- 验证：`node build.mjs` 重建（`lib/client.js` 785,105 bytes），产物含六变体选择器且 `node --check` 通过；桌面端实测（壁纸开启时由 wallpaper-engine 侧规则生效，aqua 侧为壁纸未开场景的兜底）。
+
 ## 2026-09-01 - 修复「玻璃主题」设置导航项选中时图标消失
 
 - 起因：设置页左侧导航里，「玻璃主题」被选中时图标不见、文字左移一格，其他分区正常。
