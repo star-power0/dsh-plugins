@@ -23,7 +23,7 @@ grep -rn "DSH-LOCAL:" client/ lib/
 | `desktop-env-patch` | `lib/index.js`（接线 `lib/proxy.mjs` 的 `desktopEnvPatchScript`） | 手机/外部浏览器访问 Desktop 宿主时，`<head>` 最早处补齐 `dsh-desktop-mode/platform`，避免旧版 `dsh-plugin-desktop` 抛错白屏 | host（改后重启宿主） | 是 |
 | `mobile-layout` | `client/mobile/mobile.css.ts` ⑨系列、`mobile-apply.tsx` | 手机窄屏全部视觉修复：入口隐藏、抽屉/输入卡/弹层实底、代码块可见、壁纸引擎停用、hero 布局、统计行、文件守卫等 | 页面（刷新/重开 App） | 是 |
 | `boot-cleanup` | `lib/proxy.mjs` 的 `BOOT_CLEANUP_CSS` | 页面 `<head>` 最先注入：窄屏隐藏壁纸层 + 对话列归位，补住插件启动前 0.5~1s 空窗 | host（改后重启宿主） | 是 |
-| `apk-shell` | `A:\DeepSeekHarness\pocket-apk\`（独立工程） | 手机 APK 壳，`build.ps1` 一键出包 | — | 否 |
+| `apk-shell` | `apk/`（本插件子目录） | 手机 APK 壳，`build.ps1` 一键出包 | — | 否 |
 
 **未改动的上游文件**（升级后无需重打）：`bin/`、`lib/restart.js`、`lib/settings.mjs`、
 `lib/service.mjs`、`lib/tunnel.mjs`、`lib/web-rpc.js`、`lib/ip.mjs`、

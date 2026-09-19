@@ -17,7 +17,7 @@
 | `desktop-env-patch` | `lib/index.js`（接线 `lib/proxy.mjs` 的 `desktopEnvPatchScript`） | 手机/外部浏览器访问 Desktop 宿主时，`<head>` 最早处补齐 `dsh-desktop-mode/platform`，避免旧版 `dsh-plugin-desktop` 抛错白屏（**升级 DSH Desktop 到 2.0.3+ 后可移除**） |
 | `mobile-layout` | `client/mobile/mobile.css.ts` + `mobile-apply.tsx` | 手机窄屏全部视觉修复：入口隐藏、抽屉/输入卡/弹层实底、代码块可见、壁纸引擎停用、hero 布局、统计行、文件守卫等 |
 | `boot-cleanup` | `lib/proxy.mjs` 的 `BOOT_CLEANUP_CSS` | 页面 `<head>` 最先注入：窄屏隐藏壁纸层 + 对话列归位，补住插件启动前 0.5~1s 空窗（**host 级，改后需重启宿主**） |
-| `apk-shell` | `A:\DeepSeekHarness\pocket-apk\`（独立工程，不在本仓库） | 手机 APK 壳，`build.ps1` 一键出包 |
+| `apk-shell` | `apk/`（本插件子目录） | 手机 APK 壳，`build.ps1` 一键出包 |
 
 手机窄屏修复的关键几处（完整表见 LOCAL.md §2）：
 

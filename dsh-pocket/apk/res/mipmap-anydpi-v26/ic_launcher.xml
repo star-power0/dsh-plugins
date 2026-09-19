@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive icon (API 26+): 前景是源图（缩到中心安全区，避免被系统遮罩裁切），
+     背景取源图边缘色，与前景留白自然衔接。
+     注意：background 与 foreground 必须分层——旧版两者同指一张矢量图，
+     等于没有真正利用自适应分层。 -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/ic_launcher_background" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>

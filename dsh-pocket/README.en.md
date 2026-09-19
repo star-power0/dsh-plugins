@@ -19,7 +19,7 @@ narrow-screen breakdown, re-apply steps for upstream upgrades, and a trap list. 
 | `desktop-env-patch` | `lib/index.js` (wires `desktopEnvPatchScript` from `lib/proxy.mjs`) | When a phone/external browser hits the Desktop host, the earliest `<head>` injection supplies `dsh-desktop-mode/platform`, so the older `dsh-plugin-desktop` no longer throws and blanks the page (**removable once DSH Desktop ≥ 2.0.3**) |
 | `mobile-layout` | `client/mobile/mobile.css.ts` + `mobile-apply.tsx` | All mobile narrow-screen visual fixes: hidden entries, opaque drawer/composer/popups, visible code blocks, wallpaper engine disabled, hero layout, stats row, file guard |
 | `boot-cleanup` | `BOOT_CLEANUP_CSS` in `lib/proxy.mjs` | First-injection page cleanup: hide the wallpaper layer and restore the conversation column on narrow screens, covering the 0.5–1 s gap before the plugin starts (**host-level; restart the host after editing**) |
-| `apk-shell` | `A:\DeepSeekHarness\pocket-apk\` (separate project, not in this repo) | Phone APK shell; `build.ps1` builds it in one step |
+| `apk-shell` | `apk/` (subdirectory of this plugin) | Phone APK shell; `build.ps1` builds it in one step |
 
 Key mobile fixes (full table in LOCAL.md §2):
 

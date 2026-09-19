@@ -10,3 +10,7 @@ memory.md
 # 系统文件
 .DS_Store
 Thumbs.db
+
+# dsh-pocket/apk：构建中间产物可重建；签名私钥不入库（文件保留在磁盘）
+dsh-pocket/apk/build/
+dsh-pocket/apk/pocket.keystore
