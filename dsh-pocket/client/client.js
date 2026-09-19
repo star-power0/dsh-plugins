@@ -3754,6 +3754,7 @@ var MOBILE_CSS = `
   [class*="_list_19372_"],
   [class*="_submenu_19372_"],
   [class*="_sideTop_19372_"],
+  [class*="_portal_19372_"],
   [class*="_compactList_19372_"],
   [class*="_denseList_19372_"] {
     background: #ffffff !important;
@@ -3761,9 +3762,29 @@ var MOBILE_CSS = `
   body[data-ds-dark-theme] [class*="_list_19372_"],
   body[data-ds-dark-theme] [class*="_submenu_19372_"],
   body[data-ds-dark-theme] [class*="_sideTop_19372_"],
+  body[data-ds-dark-theme] [class*="_portal_19372_"],
   body[data-ds-dark-theme] [class*="_compactList_19372_"],
   body[data-ds-dark-theme] [class*="_denseList_19372_"] {
     background: #1a1a1a !important;
+  }
+
+  /* [DSH-LOCAL:mobile-layout/\u2468e4] Drawer vs. popup stacking. The drawer is
+     forced to z-index 1200 (see the z-index note on the drawer rule) so it
+     outranks every third-party overlay, but the official popup family ships
+     at z-index 1100. When a popup is opened FROM INSIDE the drawer \u2014 the
+     session row's "..." menu (rename / fork / archive / delete) \u2014 the drawer
+     therefore paints OVER its own menu: the menu is dimmed by the drawer and
+     its rows land on the drawer surface, so tapping an item does nothing but
+     close the drawer. Raise the popup family above the drawer instead of
+     lowering the drawer (the drawer's 1200 is load-bearing, see above).
+     1300 keeps it under the fixed banners/toasts (z 9999). */
+  [class*="_list_19372_"],
+  [class*="_submenu_19372_"],
+  [class*="_sideTop_19372_"],
+  [class*="_portal_19372_"],
+  [class*="_compactList_19372_"],
+  [class*="_denseList_19372_"] {
+    z-index: 1300 !important;
   }
 
   /* [DSH-LOCAL:mobile-layout/\u2468d] Hero workspace/mode pickers: officially
