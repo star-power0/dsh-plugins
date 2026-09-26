@@ -371,9 +371,32 @@ function repairNode(value: unknown, ctx: RepairCtx, depth: number): GenuiNode | 
       return { type: 'list', items }
     }
     case 'table': {
-      const columns = repairStrings(v.columns, GENUI_LIMITS.maxTableCols, 128)
-      const rows = repairRows(v.rows, GENUI_LIMITS.maxTableRows, GENUI_LIMITS.maxTableCols)
+      let rawCols = v.columns as unknown
+      const rawRows = v.rows !== undefined ? v.rows : (v as Record<string, unknown>).data
+      // Self-heal model-shaped tables: antd-style object columns
+      // ({title,key}) become header strings, and object-array rows (or a
+      // `data` alias) flatten to 2D rows keyed by the column keys. Without
+      // this the cells are skipped by repairStrings/repairRows, which return
+      // an EMPTY table that survives repair — no droppedCount warning, the
+      // node renders as zero-height nothing ("the table vanished").
+      if (Array.isArray(rawCols) && rawCols.length > 0 && typeof rawCols[0] === 'object' && rawCols[0] !== null) {
+        rawCols = rawCols.map(c => columnHeaderText(c))
+      }
+      let rowsInput = rawRows
+      if (Array.isArray(rawRows) && rawRows.length > 0 && typeof rawRows[0] === 'object' && rawRows[0] !== null && !Array.isArray(rawRows[0])) {
+        const keys = Array.isArray(v.columns) && v.columns.length > 0 && typeof v.columns[0] === 'object' && v.columns[0] !== null
+          ? v.columns.map(c => columnKeyOf(c)).filter((k): k is string => k !== undefined)
+          : Object.keys(rawRows[0] as Record<string, unknown>)
+        rowsInput = rawRows.map(row => keys.map(k => cellText((row as Record<string, unknown>)[k])))
+      }
+      const columns = repairStrings(rawCols, GENUI_LIMITS.maxTableCols, 128)
+      const rows = repairRows(rowsInput, GENUI_LIMITS.maxTableRows, GENUI_LIMITS.maxTableCols)
       if (columns === undefined || rows === undefined) return null
+      // A table with zero columns can never render: the body slices every row
+      // to `columns.length` (0) and the whole node collapses to nothing with
+      // no warning. Drop it so the droppedCount banner fires instead of a
+      // silent disappearance.
+      if (columns.length === 0) return null
       return { type: 'table', columns, rows }
     }
     case 'chart': {
@@ -563,6 +586,38 @@ function repairStrings(v: unknown, cap: number, strCap: number): string[] | unde
     if (typeof item === 'string') out.push(item.slice(0, strCap))
   }
   return out
+}
+
+/** Header text for an object-shaped table column ({title,key} antd style). */
+function columnHeaderText(c: unknown): string {
+  const o = obj(c)
+  if (o === undefined) return String(c)
+  for (const k of ['title', 'label', 'key', 'dataIndex'] as const) {
+    const s = o[k]
+    if (typeof s === 'string' && s !== '') return s
+  }
+  return JSON.stringify(c)
+}
+
+/** Row key for an object-shaped column, mirroring columnHeaderText's order. */
+function columnKeyOf(c: unknown): string | undefined {
+  const o = obj(c)
+  if (o === undefined) return undefined
+  for (const k of ['key', 'dataIndex', 'title', 'label'] as const) {
+    const s = o[k]
+    if (typeof s === 'string' && s !== '') return s
+  }
+  return undefined
+}
+
+/** Cell text for object-array rows: strings/finite numbers pass through,
+ * everything else stringifies so the column alignment is preserved
+ * (repairRows would drop null/undefined cells and shift the row). */
+function cellText(v: unknown): string | number {
+  if (typeof v === 'string') return v
+  if (typeof v === 'number' && Number.isFinite(v)) return v
+  if (v === null || v === undefined) return ''
+  return JSON.stringify(v)
 }
 
 function repairListItems(v: unknown, cap: number): GenuiList['items'] | undefined {
@@ -1034,8 +1089,11 @@ function validateNode(value: unknown, depth: number, at: string, errors: string[
       if (!Array.isArray(v.items)) errors.push(`${at}: type 'list' requires items (array)`)
       break
     case 'table':
+      // Object-shaped columns/rows are self-healed by the repair pass (antd
+      // style {title,key} columns, object-array rows, `data` alias); only a
+      // table that cannot state its columns is a contract error.
       if (!Array.isArray(v.columns)) errors.push(`${at}: type 'table' requires columns (array)`)
-      if (!Array.isArray(v.rows)) errors.push(`${at}: type 'table' requires rows (array)`)
+      if (!Array.isArray(v.rows) && !Array.isArray((v as Record<string, unknown>).data)) errors.push(`${at}: type 'table' requires rows (array)`)
       break
     case 'chart':
       if (!Array.isArray(v.data) && !Array.isArray(v.series)) errors.push(`${at}: type 'chart' requires data or series (array)`)

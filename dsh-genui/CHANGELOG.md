@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.12] - 2026-09-26
+### 修复（"表格整块消失"事故——对象形状 table 自愈，对齐上游 #42）
+- **根因链实锤**：模型发出 antd 风格表格（`columns:[{key,title}]` + `rows:[{host,target,…}]` 对象数组）。`repairStrings` 只收字符串、`repairRows` 只收数组的数组——两者对对象**全部跳过但返回 `[]`**（不是 `undefined`），于是节点"幸存"为 `{columns:[],rows:[]}`：不计入 `droppedCount` → 黄色警告条不触发 → 渲染成零高度空表格。整块 UI 静默消失，无任何提示。复现：`{"type":"table","columns":[{key,title}],"rows":[{host,…}]}` → repair 后空表、validate ✅ 放行。
+- **`repairNode` table 分支自愈**（`src/client/guard.ts`）：对象列 → 表头字符串（`title`→`label`→`key`→`dataIndex` 顺序取首个非空）；对象行数组（或 `data` 别名）→ 按列键拍平成 2D 行；单元格 null/undefined → `''` 保持列对齐。新增三个 helper：`columnHeaderText` / `columnKeyOf` / `cellText`。
+- **空列防护**：`columns` 修复后为空时**丢弃节点**（`return null`）——让 `droppedCount` 黄色警告条照常触发，而不是渲染无声的空表。堵死同类静默失败的最后出口。
+- **`validateGenuiSpec` 同步**：table 分支接受对象形状与 `data` 别名（与 repair 行为一致），不再对可自愈的形状报错。
+- **验证**：`tsc` 0 error；`tsdown` 四路产物构建成功（client.js 115,114→115,979 B）；新增回归 `maintenance/test-genui-table-selfheal.mjs`（事故形状 / data 别名 + dataIndex + null 单元格 / 字符串列键对象行 / 空表不可能产出 / 产物 parity）；既有回归 `test-genui-fence-repair.mjs`、`test-remote-control-genui.mjs` 全绿；`plugin-safety check` 20 插件双端全绿；**真机 e2e**：刷新 GUI 后历史消息（原始 JSON 即对象形状）渲染出完整表格（表头 4 列 + 4 行数据），同条消息此前显示为空白。改动前存档 `20260926-075256-genui-table-object-shape-selfheal-20260926`。
+
 ## [0.8.11] - 2026-09-16
 ### 修复（上游 #172/#175 行为 cherry-pick，适配本机 rc.6 宿主）
 - **字段别名归一化**：`keyvalue` items/rows/entries→pairs、`callout` text/body→content、`diff` items→diffs、`quiz` title→question + choices→options、`radio`/`select` items→options（对象 `{label}` 拍平为字符串）、`steps` items→steps、`table` headers→columns——写错字段的节点不再被 repair 静默丢弃，照常渲染。当日「战报只剩标题」事故的直接根治。

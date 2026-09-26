@@ -35,6 +35,8 @@ description: "Render structured interactive UI inline in your reply via the dsh-
 
 **2026-09-16 起渲染器已采纳直觉别名兜底**：`keyvalue` 写成 `items`/`rows`、`callout` 写成 `text`/`body`、`steps` 写成 `items`、`table` 写成 `headers`、`quiz` 写成 `title`/`choices`、`radio`/`select` 写成 `items`、`diff` 写成 `items`，以及 `{"type":"stat","items":[{label,value},…]}` 指标组、`{"type":"steps","items":[…]}` 裸组件根、只给 `rows` 不给 `columns`（首行推导表头）——这些写错**会被自动纠正并渲染**，且部分丢弃时画面顶部会显示黄色警告条。兜底归兜底，**规范字段仍然是首选**（少一层转换、语义无歧义）。
 
+**2026-09-26 起 table 还支持对象形状自愈**：`columns:[{key,title}]`（antd 风格）会取 `title`→`label`→`key`→`dataIndex` 作为表头；`rows:[{host,target,…}]` 对象数组会按列键拍平成 2D 行；`data` 可作 `rows` 别名。但**规范写法（`columns:["A","B"]` + `rows:[["1","2"]]`）依然是首选**——对象形状多一层转换、列序依赖键名匹配。
+
 ### 布局
 - text: `{"type":"text","size":"h1|h2|h3|body|muted|caption","content":"...","center":true?}`
 - row / col: `{"type":"row"|"col","items":[...],"wrap":true?,"spacer":true?,"gap":n?}`

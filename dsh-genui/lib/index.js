@@ -455,9 +455,18 @@ function repairNode(value, ctx, depth) {
 			};
 		}
 		case "table": {
-			const columns = repairStrings(v.columns, GENUI_LIMITS.maxTableCols, 128);
-			const rows = repairRows(v.rows, GENUI_LIMITS.maxTableRows, GENUI_LIMITS.maxTableCols);
+			let rawCols = v.columns;
+			const rawRows = v.rows !== void 0 ? v.rows : v.data;
+			if (Array.isArray(rawCols) && rawCols.length > 0 && typeof rawCols[0] === "object" && rawCols[0] !== null) rawCols = rawCols.map((c) => columnHeaderText(c));
+			let rowsInput = rawRows;
+			if (Array.isArray(rawRows) && rawRows.length > 0 && typeof rawRows[0] === "object" && rawRows[0] !== null && !Array.isArray(rawRows[0])) {
+				const keys = Array.isArray(v.columns) && v.columns.length > 0 && typeof v.columns[0] === "object" && v.columns[0] !== null ? v.columns.map((c) => columnKeyOf(c)).filter((k) => k !== void 0) : Object.keys(rawRows[0]);
+				rowsInput = rawRows.map((row) => keys.map((k) => cellText(row[k])));
+			}
+			const columns = repairStrings(rawCols, GENUI_LIMITS.maxTableCols, 128);
+			const rows = repairRows(rowsInput, GENUI_LIMITS.maxTableRows, GENUI_LIMITS.maxTableCols);
 			if (columns === void 0 || rows === void 0) return null;
+			if (columns.length === 0) return null;
 			return {
 				type: "table",
 				columns,
@@ -693,6 +702,44 @@ function repairStrings(v, cap, strCap) {
 		if (typeof item === "string") out.push(item.slice(0, strCap));
 	}
 	return out;
+}
+/** Header text for an object-shaped table column ({title,key} antd style). */
+function columnHeaderText(c) {
+	const o = obj(c);
+	if (o === void 0) return String(c);
+	for (const k of [
+		"title",
+		"label",
+		"key",
+		"dataIndex"
+	]) {
+		const s = o[k];
+		if (typeof s === "string" && s !== "") return s;
+	}
+	return JSON.stringify(c);
+}
+/** Row key for an object-shaped column, mirroring columnHeaderText's order. */
+function columnKeyOf(c) {
+	const o = obj(c);
+	if (o === void 0) return void 0;
+	for (const k of [
+		"key",
+		"dataIndex",
+		"title",
+		"label"
+	]) {
+		const s = o[k];
+		if (typeof s === "string" && s !== "") return s;
+	}
+}
+/** Cell text for object-array rows: strings/finite numbers pass through,
+* everything else stringifies so the column alignment is preserved
+* (repairRows would drop null/undefined cells and shift the row). */
+function cellText(v) {
+	if (typeof v === "string") return v;
+	if (typeof v === "number" && Number.isFinite(v)) return v;
+	if (v === null || v === void 0) return "";
+	return JSON.stringify(v);
 }
 function repairListItems(v, cap) {
 	if (!Array.isArray(v)) return void 0;
