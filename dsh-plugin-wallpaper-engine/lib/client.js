@@ -148,6 +148,12 @@ window.__ModuleLoader__.load({
 		      // longer has to wait for the host to rescan the WE library.
 		      url: typeof o.url === "string" ? o.url : "",
 		      type: o.type === "video" || o.type === "web" ? o.type : "",
+		      // Persisted WE preview image for the same wallpaper. Painted as the
+		      // layer's background so a restore/cold start shows the wallpaper's
+		      // picture during the window in which the compositor has not yet
+		      // produced the video/iframe layer (the "plain colour first, wallpaper
+		      // one or two seconds later" report).
+		      preview: typeof o.preview === "string" ? o.preview : "",
 		      scrim: clampNum(o.scrim, 0, 1, DEFAULTS.scrim),
 		      border: clampNum(o.border, 0, 1, DEFAULTS.border),
 		      blur: clampNum(o.blur, 0, 40, DEFAULTS.blur),
@@ -196,10 +202,33 @@ window.__ModuleLoader__.load({
 
 		function persistSelection() {
 		  try {
+		    // Repair-on-write: several rotation-validation paths persist BEFORE the
+		    // inventory refetch resolves, when selection.url/preview are still null.
+		    // Letting that empty media overwrite a previously resolved url would
+		    // disable the mount-before-inventory fast path on the next cold start —
+		    // the observed "plain colour for a second or two before the wallpaper
+		    // appears". While the selection id is unchanged, keep the previously
+		    // persisted media instead of writing an empty one.
+		    let url = selection.url || "";
+		    let type = selection.type || "";
+		    let preview = selection.preview || "";
+		    if (selection.id && !url) {
+		      try {
+		        const prev = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "null");
+		        if (prev && prev.id === selection.id) {
+		          if (typeof prev.url === "string" && prev.url) {
+		            url = prev.url;
+		            if (!type && typeof prev.type === "string") type = prev.type;
+		          }
+		          if (!preview && typeof prev.preview === "string") preview = prev.preview;
+		        }
+		      } catch { /* malformed old record — write as-is */ }
+		    }
 		    localStorage.setItem(SETTINGS_KEY, JSON.stringify({
 		      id: selection.id,
-		      url: selection.url || "",
-		      type: selection.type || "",
+		      url,
+		      type,
+		      preview,
 		      scrim: selection.scrim,
 		      border: selection.border,
 		      blur: selection.blur,
@@ -453,20 +482,31 @@ window.__ModuleLoader__.load({
 		  if (!selection.id) {
 		    selection.url = null;
 		    selection.type = null;
+		    selection.preview = null;
 		    syncRotationTimer();
 		    emit();
 		    return;
 		  }
 		  const w = selection.inventory.wallpapers.find((x) => x.id === selection.id);
 		  if (!w || !isRotatableWallpaper(w)) {
+		    // Inventory entry not resolvable yet: keep any previously persisted
+		    // url/preview readable through persistSelection's repair-on-write, but
+		    // clear the live ones so the layer does not show a stale wallpaper.
 		    selection.url = null;
 		    selection.type = null;
+		    selection.preview = null;
 		    syncRotationTimer();
 		    emit();
 		    return;
 		  }
 		  selection.url = w.media;
 		  selection.type = w.type;
+		  selection.preview = w.preview || "";
+		  // Persist the resolved media NOW: without this write the resolved url/preview
+		  // never reach storage (the persistSelection at the top of this function ran
+		  // while url was still unresolved), so every cold start had to wait for the
+		  // full inventory rescan before the layer could mount.
+		  persistSelection();
 		  syncRotationTimer();
 		  emit();
 		}
@@ -508,6 +548,16 @@ window.__ModuleLoader__.load({
 		      node.appendChild(buildMedia(selection));
 		      document.body.appendChild(node);
 		    }
+		    // Poster fallback: paint the persisted WE preview as the layer's own
+		    // background. The video/iframe sits on top once it renders its first
+		    // frame, so the poster only shows during the gap windows (cold start
+		    // before media load, window restore while the compositor rebuilds the
+		    // media layer) — turning "plain colour for 1-2s" into "wallpaper picture
+		    // immediately, motion when the media catches up".
+		    const poster = selection.preview
+		      ? 'url("' + selection.preview + '") center / cover no-repeat'
+		      : "";
+		    if (node.style.background !== poster) node.style.background = poster;
 		    const video = node.querySelector("video");
 		    if (video) {
 		      if (selection.playing) { try { video.play().catch(() => {}); } catch {} }
@@ -639,6 +689,24 @@ window.__ModuleLoader__.load({
 		  const scrim = document.getElementById(SCRIM_ID);
 		  if (scrim) scrim.style.background = "";
 		  appliedScrimColor = null;
+		}
+
+		// ── Window-restore hook ──────────────────────────────────────────────────────
+		// Minimizing an Electron/Chromium window throttles media decoders and drops
+		// compositor textures; on restore the behind-body video/iframe layer needs a
+		// beat to produce its first frame again, during which only the app's CSS
+		// colours show (the "minimize, reopen, plain colour, then wallpaper" report).
+		// On becoming visible: resume the video immediately and force one synchronous
+		// layout so the compositor re-pushes the z-index:-1/-2 layers on this frame
+		// (same rationale as the scrim-immediacy reflow in applyEffects).
+		function handleVisibilityRestore() {
+		  if (typeof document === "undefined" || document.visibilityState !== "visible") return;
+		  const node = document.getElementById(LAYER_ID);
+		  const video = node && node.querySelector("video");
+		  if (video) { try { video.play().catch(() => {}); } catch { /* ignore */ } }
+		  if (document.body && document.body.offsetHeight !== undefined) {
+		    void document.body.offsetHeight;
+		  }
 		}
 
 		// ── Startup consistency watchdog ─────────────────────────────────────────────
@@ -1294,6 +1362,13 @@ window.__ModuleLoader__.load({
 		      // Startup watchdog: re-verify the glass scheme invariant for ~60s after
 		      // boot and correct + report any contradiction (see the block above).
 		      const stopWatch = installConsistencyWatch();
+		      // Window-restore hook: resume media + force a reframe when the page
+		      // becomes visible again after being minimized/hidden.
+		      let restoreHook = null;
+		      if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+		        restoreHook = handleVisibilityRestore;
+		        document.addEventListener("visibilitychange", restoreHook);
+		      }
 		      syncLayers();
 		      applyEffects();
 		      return () => {
@@ -1301,6 +1376,9 @@ window.__ModuleLoader__.load({
 		        unsubEffects();
 		        if (observer) observer.disconnect();
 		        stopWatch();
+		        if (restoreHook && typeof document.removeEventListener === "function") {
+		          document.removeEventListener("visibilitychange", restoreHook);
+		        }
 		        clearRotationTimer();
 		        const node = document.getElementById(LAYER_ID);
 		        if (node) node.remove();

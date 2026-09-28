@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-09-28 - 恢复窗口壁纸延迟修复：持久化 media 修复 + 海报帧兜底 + 恢复钩子
+
+- 症状（丞相报告）：最小化 DSH 后点开窗口，先见外观（ui-custom）调色、1-2 秒后才见壁纸；重开/冷启动同样先见纯色。
+- 根因（三层）：
+  1. `applySelection()` 成功解析 media 后漏调 `persistSelection()` —— resolved url 从未落盘，「持久化 resolved media 以便冷启动先挂层」的设计实际失效，每次冷启动都要等 inventory 全量重扫；
+  2. rotation 校验路径在 media 解析前提前 persist，空 url 覆盖存档（本机存档确为 `url:""`）；
+  3. 恢复窗口时 Chromium 丢弃合成层 surface，video/iframe 层异步重建；实测最小化期间视频继续解码，但窗口不可见时渲染循环停摆 —— 空窗主要在合成层重建。
+- 修复（全部在 `src/client.js`）：
+  - `applySelection()` 成功路径补 `persistSelection()`；
+  - `persistSelection()` repair-on-write：id 未变且新值无 url/preview 时保留旧值；
+  - 新增 `preview` 字段（WE 官方 `preview.jpg`）全程维护；
+  - `syncLayers()` 把 preview 铺成 `.we-layer` 自身 background —— 海报帧兜底，合成树重建第一帧即有壁纸画面，视频跟上后自然覆盖；
+  - `visibilitychange` 恢复钩子：可见时 `video.play()` + 强制 reflow（挂/卸在 `ctx.effect` 生命周期）。
+- 验证：`plugin-safety snapshot`（`20260928-115539`）→ build（63,907B）→ `node --check` + `verify-client.mjs` → `plugin-safety check` 20 插件双端全绿 → Desktop（CDP 9224）重启实测：localStorage 含 url/type/preview、海报已铺、video readyState 4；二次冷启动层已先于 inventory 挂载。
+- 备注：本机壳的 `visibilityState` 上报与窗口状态脱钩（最小化/恢复事件不总派发到页面），海报帧是主兜底、钩子是保险。
+
 ## 2026-09-19 - 弹窗可读性修复补全：模式/工作区弹层（_portal_ 变体）
 
 - 症状（丞相报告）：新建会话页的「模式选择」与「工作区选择」弹层半透明，壁纸透过弹层与文字重叠、看不清；而模型选择与权限弹层是清楚的。要求「和模型的选择和那个权限一样，不要透明的，深色浅色都搞定，无论皮肤壁纸外观怎么变」。
