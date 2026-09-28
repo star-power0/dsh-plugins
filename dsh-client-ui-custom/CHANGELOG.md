@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-09-28 - motion：切换入场回放加行数门控（LOAD_BATCH_MAX_ROWS = 80）
+
+- 起因（丞相报告）：两个会话之间快速切换时整个桌面发卡。2026-09-28 取证（Tracing + CDP 合成点击）定位 `tryReplay` 切换回放 ~273ms/次，是插件侧最大的切换路径开销：大会话 146+ 行逐个 classList 标记 + 每行一次强制 reflow + 全行 stagger。
+- 改动（仅 `src/client/motion/motion.ts`）：
+  1. 新增常量 `LOAD_BATCH_MAX_ROWS = 80`（含完整动机注释）；
+  2. `applyBatch()` 入口门控：load 批次行数超限**整体跳过**（行不标记、直接显示）——一处门控覆盖全部 load 调用方（observer 首载、会话切换回放、flush 重放）；增量批次（`load=false`）与面板淡入（`panelEntrance`）不受影响，小会话动画原样保留。
+- 验证：`node build.mjs` 重建双产物 + `node --check` 通过；`plugin-safety check` 20 插件双端全绿；CDP 实测（Desktop 9224）——小会话 38 行、32 行带 `dsu-motion-row-in`（动画保留）；大会话 146 行、**0 行标记**（门控生效）；切换 trace 零 >50ms 长任务。vitest 本机未配置 runner（上游 spec 随包），行为验证以 CDP 实测为准。
+- 备注：大会话切换时 `tryReplay` 仍会按既有重试逻辑做几次全文档扫描（<50ms/次，分摊不构成帧预算压力）——既有逻辑，本轮未动。
+- 回退：快照 `20260928-131053-ui-custom-motion-load-batch-row-cap-pre-change`。
+
 ## 2026-09-19 - 文档：README 重写为本地维护版（申明上游 + 本地改动）
 
 - 起因：原 README 是上游原版全文（655 行，含上游宣传视频链接、上游 jsDelivr CDN 图片），

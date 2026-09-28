@@ -1,8 +1,8 @@
-// ../DeepSeekHarness/dsh-home/profiles/plugins/dsh-client-ui-custom/src/index.ts
+// src/index.ts
 import { settingsNamespace } from "@deepseek-ai/dsh-settings";
 import z from "@deepseek-ai/schemastery";
 
-// ../DeepSeekHarness/dsh-home/profiles/plugins/dsh-client-ui-custom/src/shared.ts
+// src/shared.ts
 var UI_CUSTOM_SETTINGS_NS = "ui-custom";
 var FEATURES = ["history", "markdown", "appearance", "marketplace", "shortcuts", "usage", "motion"];
 var HISTORY_POSITIONS = ["left", "right", "off"];
@@ -18,7 +18,7 @@ var isSidebarMotionStyle = (value) => typeof value === "string" && SIDEBAR_MOTIO
 var DEFAULT_HISTORY_POSITION = "off";
 var DEFAULT_HISTORY_LIMIT = 10;
 
-// ../DeepSeekHarness/dsh-home/profiles/plugins/dsh-client-ui-custom/src/index.ts
+// src/index.ts
 var UiCustomSectionSchema = z.object({
   // theme
   wallpaper: z.string().default(""),

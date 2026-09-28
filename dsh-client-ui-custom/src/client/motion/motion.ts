@@ -78,6 +78,15 @@ export function styleClass(style: EntranceStyle): string {
 export const STAGGER_STEP_MS = 40
 /** Stagger cap: rows beyond this wait no longer (the tail joins together). */
 export const STAGGER_CAP_MS = 320
+/**
+ * Load batches with more rows than this skip the entrance entirely. Marking a
+ * load batch costs one classList write plus one forced reflow per reused row
+ * (applyBatch), and the stagger then animates every row — on a conversation
+ * with hundreds of rows that is the dominant session-switch cost (~270ms of
+ * main-thread work per switch) and a cascade that long reads as jank anyway.
+ * Small conversations keep the full entrance; large ones appear instantly.
+ */
+export const LOAD_BATCH_MAX_ROWS = 80
 /** Longest buffered batch queue while the feature is disabled. */
 const MAX_PENDING_BATCHES = 8
 /**
@@ -212,6 +221,10 @@ export function installConversationEntrance(options: MotionEngineOptions): Motio
   }
 
   function applyBatch(rows: readonly HTMLElement[], load: boolean): void {
+    // Oversized load batches skip the entrance entirely (see LOAD_BATCH_MAX_ROWS):
+    // the rows stay unmarked and simply appear, with no stagger to pay for.
+    // Incremental batches (load=false) are never large and keep their fade.
+    if (load && rows.length > LOAD_BATCH_MAX_ROWS) return
     // Document-order the batch so the stagger cascades top-down.
     const ordered = [...rows].sort((a, b) =>
       (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1)
