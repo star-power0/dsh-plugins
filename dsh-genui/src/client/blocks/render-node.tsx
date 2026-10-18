@@ -7,6 +7,7 @@
 import { type ReactNode, type ComponentType } from 'react'
 import * as primitives from '@deepseek-ai/dsh-client-ui-primitives'
 import css from '../GenuiBlock.module.css'
+import { Md, MdInline } from '../md.tsx'
 import { GENUI_LIMITS } from '../guard.ts'
 import type { GenuiNode } from '../spec.ts'
 import type { AnswersState, GenuiBlockProps } from './state.ts'
@@ -56,7 +57,7 @@ export function renderNode(
       const size = node.size ?? 'body'
       return (
         <div key={key} className={`${css.text} ${css[size]}` + (node.center ? ` ${css.center}` : '')}>
-          {node.content}
+          <Md text={node.content} />
         </div>
       )
     }
@@ -185,8 +186,8 @@ export function renderNode(
           {items.map((item, i) => (
             <div key={i} className={css.li}>
               {typeof item === 'string'
-                ? <span className={css.liTitle}>{item}</span>
-                : <><span className={css.liTitle}>{item.title}</span>{item.desc !== undefined && <span className={css.liDesc}>{item.desc}</span>}</>}
+                ? <span className={css.liTitle}><MdInline text={item} /></span>
+                : <><span className={css.liTitle}><MdInline text={item.title} /></span>{item.desc !== undefined && <span className={css.liDesc}><MdInline text={item.desc} /></span>}</>}
             </div>
           ))}
         </div>

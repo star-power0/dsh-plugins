@@ -187,6 +187,7 @@ const CONTAINER_TYPES: ReadonlySet<string> = new Set(['col', 'row', 'grid', 'car
  * (behavior aligned with upstream #172/#175, reimplemented on this codebase).
  */
 const FIELD_ALIASES: Readonly<Record<string, ReadonlyArray<readonly [string, string]>>> = {
+  text: [['text', 'content'], ['value', 'content']],
   keyvalue: [['items', 'pairs'], ['rows', 'pairs'], ['entries', 'pairs']],
   callout: [['text', 'content'], ['body', 'content']],
   diff: [['items', 'diffs']],
@@ -242,6 +243,18 @@ function normalizeNode(v: Record<string, unknown>): Record<string, unknown> {
       })
     }
   }
+  // Container `items` shipped as ONE node object instead of an array
+  // (`{"type":"card","items":{"type":"table",…}}`). `repairItems` returns
+  // `[]` for any non-array — the container survives with no children, so it
+  // renders as a blank card and NOTHING reports a drop (the empty array is
+  // not a "dropped node"). Wrap the single node so it renders.
+  // Only for containers whose `items` are nodes; list/accordion/tabs keep
+  // their own record shapes and are handled by their repair branches.
+  if (CONTAINER_TYPES.has(type) && v.items !== undefined && !Array.isArray(v.items)
+    && obj(v.items) !== undefined && typeof (v.items as Record<string, unknown>).type === 'string') {
+    if (out === null) out = { ...v }
+    out.items = [v.items]
+  }
   // table with row data but no columns: derive them from the first row
   // (string cells only) so the header is not silently lost (upstream #175).
   if (type === 'table' && !Array.isArray(v.columns) && Array.isArray(v.rows) && v.rows.length > 0) {
@@ -258,6 +271,12 @@ function normalizeNode(v: Record<string, unknown>): Record<string, unknown> {
 interface RepairCtx {
   /** Nodes left in the budget; 0 stops the walk. */
   remaining: number
+  /**
+   * Nodes dropped anywhere in the tree (not just at the root). A container
+   * whose children all fail repair used to survive as an empty shell with no
+   * warning — the blank-card symptom. Counted here so the banner fires.
+   */
+  dropped: number
 }
 
 /** Walk `list` with the shared node budget; drops invalid entries. */
@@ -269,6 +288,7 @@ function repairItems(list: unknown, ctx: RepairCtx, depth: number): GenuiNode[] 
     ctx.remaining -= 1
     const node = repairNode(item, ctx, depth)
     if (node !== null) out.push(node)
+    else ctx.dropped += 1
   }
   return out
 }
@@ -900,7 +920,7 @@ export function repairGenuiSpec(value: unknown): GenuiSpec | null {
  * disambiguation can recurse without re-entering itself.
  */
 function repairSpecEnvelope(v: Record<string, unknown>): GenuiSpec {
-  const ctx: RepairCtx = { remaining: GENUI_LIMITS.maxNodes }
+  const ctx: RepairCtx = { remaining: GENUI_LIMITS.maxNodes, dropped: 0 }
   const items = repairItems(v.items, ctx, 0)
   const spec: GenuiSpec = {
     ...opt('title', str(v.title, GENUI_LIMITS.maxString)),
@@ -909,13 +929,15 @@ function repairSpecEnvelope(v: Record<string, unknown>): GenuiSpec {
     ...opt('append', v.append === true ? true : undefined),
     items,
   }
-  // Partial-drop observability: compare the declared top-level items with
-  // the survivors so a partly-empty block is never silent (the
-  // "banner-only empty block" incident was invisible because repair drops
-  // defect nodes quietly). Idempotent: a repaired spec re-repairs with zero
-  // drops, so the warning disappears once the model fixes the fields.
+  // Partial-drop observability. Root-level drops were already counted by
+  // comparing declared vs surviving items; ctx.dropped additionally catches
+  // drops INSIDE a container (a card whose only child failed used to survive
+  // as an empty shell with no warning at all). Idempotent: a repaired spec
+  // re-repairs with zero drops, so the banner disappears once the model
+  // fixes the fields.
   const declared = Array.isArray(v.items) ? v.items.length : 0
-  if (declared > items.length) spec.droppedCount = declared - items.length
+  const dropped = Math.max(ctx.dropped, declared > items.length ? declared - items.length : 0)
+  if (dropped > 0) spec.droppedCount = dropped
   return spec
 }
 

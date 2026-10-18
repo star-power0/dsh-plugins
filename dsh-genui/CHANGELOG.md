@@ -1,5 +1,62 @@
 # Changelog
 
+## [0.8.14] - 2026-10-18
+### 修复（节点文本从不渲染 Markdown——表格单元格露出 `**` 和反引号）
+
+- **事故**：用户截图中表格显示成 `**350 ms**`、`` `step-3.7-flash` `` 原样带星号和反引号。
+  根因不是表格特有：**整个插件从未接入 Markdown 渲染**。`charts.tsx` 的单元格是
+  `<td>{String(cell)}</td>`，`render-node.tsx` 的 `text` 节点直接 `{node.content}`，
+  `advanced.tsx` 的 `callout`/`keyvalue`/`steps` 同样把裸字符串塞进 JSX。
+  构建产物 `lib/client.js` 全文搜不到一处 `MarkdownText`。
+- **新增 `src/client/md.tsx`**：薄封装宿主 `@deepseek-ai/dsh-client-ui-primitives` 的 `MarkdownText`，
+  两个变体——`Md`（块级：text 正文、callout 正文）与 `MdInline`（行内：表格单元格、keyvalue 值、
+  list/steps 行）。复用宿主解析器而非自写，是为了**继承同一套不受信链接白名单**（仅 `http(s)`/`mailto`）
+  与代码块处理，GenUI 文本与助手正文保持同一安全姿态。
+- **接入范围**：`table` 单元格与表头、`text`、`callout` 标题+正文、`keyvalue` 值、`list` 的 title/desc、
+  `steps` 的 title/desc。共 4 个渲染文件。
+- **样式收口**（`GenuiBlock.module.css`）：`.table td` 是 `white-space: nowrap`，启用 Markdown 后
+  行内代码会撑破行高。新增 `.mdInline` 把宿主生成的 `<p>` 压回 `display: inline` 并清 margin，
+  列表项用 ` · ` 连接；`.md` 去掉首尾段落 margin；`.table td/th code` 保持 `white-space: pre`。
+  **注意**：宿主构建把这些子样式表 stub 成 `{}`（`MarkdownText_module_css_default = {}`），
+  内层元素拿不到 class，所以选择器按标签匹配而非按类名。
+- **回归**：新增 `src/client/blocks/markdown.test.tsx`（13 项）——表格粗体/代码/表头、原始分隔符
+  不泄漏、行内扁平化、text/callout/keyvalue/steps 各自的 Markdown、`<script>` 不生成脚本节点、
+  `javascript:` 链接被拒、空单元格、纯文本不变。全量 `vitest run` 18/18 通过；`tsc` 0 error；
+  `tsdown` 构建成功（`client.js` 116,344→117,248 B）；`plugin-safety check` 20 插件双端全绿。
+  改动前存档 `20261018-154233-fix-genui-markdown-rendering`。
+- **二次修复（真机反馈"字变大了"）**：真机验证时 Markdown 渲染正常但字号明显放大、表格被撑出横向
+  滚动条。根因是宿主 markdown 根节点用 **`font: var(--dsw-font-markdown-base)` = `16px/28px`**
+  这个 **`font` 简写**硬编码——助手正文是对的长度，但 GenUI 的类型刻度是 body 14px / 表格 13px，
+  简写把 font-size、line-height、family 三者一起覆盖，且简写对继承的压制比单独 `font-size` 更强。
+  修法是对内层根节点重置 `font: inherit`（而非只改 `font-size`，那样行高和字族仍会漂），
+  让 Markdown 文本与它所在的节点取**完全相同**的字号——恢复成加 Markdown 之前的观感。
+  同时把段间距从宿主的 16px 收到 `--dsl-g-gap-sm`，并在 `.md/.mdInline code` 上
+  `font-size: inherit`（宿主 `<code>` 是 prose 尺寸，在 13px 单元格里会压过整行）。
+  `tsc` 0 error；`vitest` 18/18；`tsdown` 重建 117,472 B。
+
+## [0.8.13] - 2026-10-18
+### 修复（"卡片全空白"事故——容器 items 传单对象时静默吞掉子节点）
+
+- **事故**：模型发出 `{"type":"card","title":"…","items":{"type":"table",…}}`——`items` 写成**单个节点对象**而不是数组。
+  `repairItems` 的 `if (!Array.isArray(list)) return []` 对非数组一律返回**空数组**（不是 `undefined`），于是卡片
+  "幸存"为 `{title, items:[]}`：子节点全丢但空数组**不计入 `droppedCount`** → 黄色警告不触发 → 渲染成**零高度空白卡片**。
+  用户看到的是三个空卡片 + 顶部一条 "1 个组件因字段名错误未渲染"，无任何具体信息。
+- **`normalizeNode` 容器 items 自愈**（`src/client/guard.ts`）：容器类型（`col`/`row`/`grid`/`card`）的 `items`
+  若为**带字符串 `type` 的对象**，自动包装成单元素数组。只处理"元素是节点"的容器；`list`/`accordion`/`tabs`
+  的 `items` 是记录形状，各自走原有 repair 分支，不受影响。
+- **`text` 字段别名**：`FIELD_ALIASES` 新增 `text: [['text','content'],['value','content']]` ——
+  `{"type":"text","value":"…"}` / `{"type":"text","text":"…"}` 不再被丢弃（此前只有 `content` 被接受）。
+- **容器内部丢弃计入警告**：`RepairCtx` 新增 `dropped` 计数器，`repairItems` 每丢弃一个节点 `ctx.dropped += 1`；
+  `repairSpecEnvelope` 取 `max(ctx.dropped, 根层声明差)` 作为 `droppedCount`。**容器被子节点全丢空时也会弹警告**，
+  静默空白卡片不再可能。
+- **回归**：新增 `maintenance/test-genui-card-selfheal.mjs`（事故形状 / text 别名 / 嵌套丢弃警告 / 幂等 /
+  四种容器自愈 / 产物 parity）；既有 `test-genui-fence-repair.mjs`、`test-genui-table-selfheal.mjs` 全绿；
+  `tsc` 0 error；`tsdown` 构建成功（client.js 113→114 KB）；`plugin-safety check` 20 插件双端全绿。
+  改动前存档 `20261018-134852-genui-card-items-object-selfheal`。
+- **上游对照**：上游 0.13.0（2026-10-17）要求 DSH `^0.2.0-rc.1 || ^0.2.1-rc.1`，本机宿主仍是 `0.1.0-rc.6`，
+  差一个大版本，无法直接升级；本次仍取行为补丁。上游 0.13.0 的 `partialRepairGenuiSpec`（单坏节点剔除而非
+  整条围栏降级）尚未移植——留待宿主升级后再评估。
+
 ## [0.8.12] - 2026-09-26
 ### 修复（"表格整块消失"事故——对象形状 table 自愈，对齐上游 #42）
 - **根因链实锤**：模型发出 antd 风格表格（`columns:[{key,title}]` + `rows:[{host,target,…}]` 对象数组）。`repairStrings` 只收字符串、`repairRows` 只收数组的数组——两者对对象**全部跳过但返回 `[]`**（不是 `undefined`），于是节点"幸存"为 `{columns:[],rows:[]}`：不计入 `droppedCount` → 黄色警告条不触发 → 渲染成零高度空表格。整块 UI 静默消失，无任何提示。复现：`{"type":"table","columns":[{key,title}],"rows":[{host,…}]}` → repair 后空表、validate ✅ 放行。

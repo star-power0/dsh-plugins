@@ -316,6 +316,11 @@
 }
 .table tr:last-child td { border-bottom: none; }
 
+/* Markdown inside a cell must not fight the nowrap rhythm: the inline wrapper
+   already flattens <p>, and code spans keep their own padding without forcing
+   the cell wider than its content. */
+.table td code, .table th code { white-space: pre; }
+
 /* sortable header button (v2.9) */
 .thSort {
   background: none;
@@ -463,6 +468,46 @@
 .calloutWarning .calloutTitle::before { background: var(--dsw-alias-state-warn-primary, #f5b83d); }
 .calloutError .calloutTitle::before { background: var(--dsw-alias-state-error-primary, #ff6b6b); }
 .calloutBody { color: var(--dsw-alias-label-secondary); }
+
+/* ---------- markdown in node text ----------
+   Node copy is authored by the model, so it carries inline Markdown. These
+   wrappers normalize the host MarkdownText output for the two contexts we use
+   it in. The host's own MarkdownText stylesheet is CSS-module-scoped and the
+   plugin build stubs those class names to `{}`, so the inner element is matched
+   by tag instead of by class. */
+
+/* Block context (text node body, callout body): no extra wrapper padding, and
+   the outer block already owns the line-height / color. */
+.md > div > :first-child { margin-top: 0; }
+.md > div > :last-child { margin-bottom: 0; }
+
+/* The host markdown root hard-codes `font: 16px/28px <family>`, which is correct
+   for assistant prose but 2px larger than the GenUI type scale (body 14px,
+   table/callout 13px). Left alone it inflates every node that renders Markdown
+   and pushes tables past their column width — the "字变大了" report. Reset the
+   whole shorthand to `inherit` so Markdown text adopts the SAME size as the
+   block it sits in, exactly as plain text did before Markdown was added.
+   `font: inherit` also covers line-height and family, so no property drifts. */
+.md > div, .mdInline > div { font: inherit; }
+
+/* The host gives paragraphs a 16px block margin, tuned for full-width prose.
+   Inside a GenUI card that reads as a hole between lines; scale it to the
+   local gap so multi-paragraph node text stays part of the block. */
+.md > div > p { margin: var(--dsl-g-gap-sm) 0; }
+
+/* Inline context (table cell, key/value value, list row): flatten the generated
+   <p> back to inline so the surrounding table row keeps its single-line rhythm,
+   and drop the paragraph margin that would otherwise pad every cell. */
+.mdInline > div { display: inline; }
+.mdInline p { display: inline; margin: 0; }
+.mdInline ul, .mdInline ol { display: inline; margin: 0; padding: 0; list-style: none; }
+.mdInline li { display: inline; }
+.mdInline li + li::before { content: " · "; }
+
+/* The host's <code> styling is sized for prose; inside a 13px cell it dominates
+   the row. Keep it inline and monospaced but inherit the cell's own size. */
+.md code, .mdInline code { font-family: var(--dsl-g-font-mono); font-size: inherit; }
+.mdInline code { padding: 1px 4px; }
 
 /* ---------- steps ---------- */
 
@@ -790,6 +835,10 @@
   min-width: 0;
 }
 .ftRow { display: flex; align-items: center; gap: var(--dsl-g-gap-sm); padding: 3px var(--dsl-g-gap-xs); border-radius: var(--dsl-g-radius-control); }
+/* One tree node = its own row PLUS the child nodes stacked beneath it. Without
+   this wrapper the children were emitted as siblings inside .ftRow (a flex
+   ROW) and the entire subtree flattened onto a single horizontal line. */
+.ftNode { display: flex; flex-direction: column; }
 .ftRow:hover { background: var(--dsw-alias-bg-layer-1); }
 .ftIcon {
   font-size: 10px;

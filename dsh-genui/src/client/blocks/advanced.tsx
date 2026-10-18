@@ -7,6 +7,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { CodeBlock, DiffBlock, JsonTree } from '@deepseek-ai/dsh-client-ui-primitives'
 import css from '../GenuiBlock.module.css'
+import { Md, MdInline } from '../md.tsx'
 import { GENUI_LIMITS } from '../guard.ts'
 import { PlotBlock } from '../PlotBlock.tsx'
 import { renderNode } from './render-node.tsx'
@@ -26,8 +27,8 @@ export function CalloutNode({ node }: { node: GenuiCallout }) {
   const toneClass = CALLOUT_TONES[tone] ?? css.calloutInfo
   return (
     <div className={`${css.callout} ${toneClass}`} data-genui-callout>
-      {node.title !== undefined && <div className={css.calloutTitle}>{node.title}</div>}
-      <div className={css.calloutBody}>{node.content}</div>
+      {node.title !== undefined && <div className={css.calloutTitle}><MdInline text={node.title} /></div>}
+      <div className={css.calloutBody}><Md text={node.content} /></div>
     </div>
   )
 }
@@ -45,8 +46,8 @@ export function StepsNode({ steps }: { steps: GenuiSteps }) {
           <li key={i} className={`${css.step} ${done ? css.stepDone : ''} ${active ? css.stepActive : ''}`}>
             <span className={css.stepMarker}>{done ? '✓' : String(i + 1)}</span>
             <span className={css.stepContent}>
-              <span className={css.stepTitle}>{step.title}</span>
-              {step.desc !== undefined && <span className={css.stepDesc}>{step.desc}</span>}
+              <span className={css.stepTitle}><MdInline text={step.title} /></span>
+              {step.desc !== undefined && <span className={css.stepDesc}><MdInline text={step.desc} /></span>}
             </span>
           </li>
         )
@@ -63,7 +64,7 @@ export function KeyValueNode({ node }: { node: GenuiKeyValue }) {
       {pairs.map((pair, i) => (
         <div key={i} className={css.kvRow}>
           <dt className={css.kvKey}>{pair.key}</dt>
-          <dd className={css.kvValue}>{pair.value}</dd>
+          <dd className={css.kvValue}><MdInline text={pair.value} /></dd>
         </div>
       ))}
     </dl>
@@ -317,17 +318,23 @@ export function FileTreeNode({ node }: { node: GenuiFileTree }) {
     const isDir = n.type === 'dir' || (n.children !== undefined && n.children.length > 0)
     const k = pathKey(depth, i)
     const folded = isDir && collapsed.has(k)
+    // The children MUST live in their own column box, never as siblings of the
+    // button inside the row: .ftRow is a flex ROW, so emitting them there
+    // flattened the whole subtree onto one horizontal line (the "叠起来"
+    // rendering bug). One node = the row, then the child nodes stacked under it.
     return (
-      <div key={k} className={css.ftRow} style={{ paddingLeft: `${depth * 16}px` }}>
-        <button
-          type="button"
-          className={css.ftNameBtn}
-          aria-expanded={isDir ? !folded : undefined}
-          onClick={isDir ? () => toggle(k) : undefined}
-        >
-          <span className={`${css.ftIcon} ${isDir ? css.ftIconDir : ''}`} aria-hidden>{isDir ? (folded ? '▸' : '▾') : '·'}</span>
-          <span className={`${css.ftName} ${isDir ? css.ftDir : ''}`}>{n.name}</span>
-        </button>
+      <div key={k} className={css.ftNode}>
+        <div className={css.ftRow} style={{ paddingLeft: `${depth * 16}px` }}>
+          <button
+            type="button"
+            className={css.ftNameBtn}
+            aria-expanded={isDir ? !folded : undefined}
+            onClick={isDir ? () => toggle(k) : undefined}
+          >
+            <span className={`${css.ftIcon} ${isDir ? css.ftIconDir : ''}`} aria-hidden>{isDir ? (folded ? '▸' : '▾') : '·'}</span>
+            <span className={`${css.ftName} ${isDir ? css.ftDir : ''}`}>{n.name}</span>
+          </button>
+        </div>
         {isDir && !folded && (n.children ?? []).map((c, ci) => renderNode(c, depth + 1, ci))}
       </div>
     )

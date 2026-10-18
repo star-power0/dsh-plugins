@@ -5,6 +5,7 @@
  */
 import { useState } from 'react'
 import css from '../GenuiBlock.module.css'
+import { MdInline } from '../md.tsx'
 import { GENUI_LIMITS } from '../guard.ts'
 import type { GenuiChart, GenuiTable } from '../spec.ts'
 
@@ -54,7 +55,7 @@ export function TableNode({ node }: { node: GenuiTable }) {
                 aria-sort={sort !== null && sort.col === i ? (sort.dir === 1 ? 'ascending' : 'descending') : 'none'}
               >
                 <button type="button" className={css.thSort} onClick={() => clickHeader(i)}>
-                  {c}
+                  <MdInline text={c} />
                   {sort !== null && sort.col === i && <span className={css.thSortMark} aria-hidden>{sort.dir === 1 ? ' ▲' : ' ▼'}</span>}
                 </button>
               </th>
@@ -63,7 +64,7 @@ export function TableNode({ node }: { node: GenuiTable }) {
         </thead>
         <tbody>
           {sorted.map((row, i) => (
-            <tr key={i}>{row.slice(0, columns.length).map((cell, j) => <td key={j}>{String(cell)}</td>)}</tr>
+            <tr key={i}>{row.slice(0, columns.length).map((cell, j) => <td key={j}><MdInline text={String(cell)} /></td>)}</tr>
           ))}
         </tbody>
       </table>

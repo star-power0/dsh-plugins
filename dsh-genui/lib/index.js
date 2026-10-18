@@ -241,6 +241,7 @@ const CONTAINER_TYPES = /* @__PURE__ */ new Set([
 * (behavior aligned with upstream #172/#175, reimplemented on this codebase).
 */
 const FIELD_ALIASES = {
+	text: [["text", "content"], ["value", "content"]],
 	keyvalue: [
 		["items", "pairs"],
 		["rows", "pairs"],
@@ -290,6 +291,10 @@ function normalizeNode(v) {
 			});
 		}
 	}
+	if (CONTAINER_TYPES.has(type) && v.items !== void 0 && !Array.isArray(v.items) && obj(v.items) !== void 0 && typeof v.items.type === "string") {
+		if (out === null) out = { ...v };
+		out.items = [v.items];
+	}
 	if (type === "table" && !Array.isArray(v.columns) && Array.isArray(v.rows) && v.rows.length > 0) {
 		const first = v.rows[0];
 		if (Array.isArray(first) && first.length > 0 && first.every((c) => typeof c === "string")) {
@@ -309,6 +314,7 @@ function repairItems(list, ctx, depth) {
 		ctx.remaining -= 1;
 		const node = repairNode(item, ctx, depth);
 		if (node !== null) out.push(node);
+		else ctx.dropped += 1;
 	}
 	return out;
 }
@@ -1037,7 +1043,10 @@ function repairGenuiSpec(value) {
 * disambiguation can recurse without re-entering itself.
 */
 function repairSpecEnvelope(v) {
-	const ctx = { remaining: GENUI_LIMITS.maxNodes };
+	const ctx = {
+		remaining: GENUI_LIMITS.maxNodes,
+		dropped: 0
+	};
 	const items = repairItems(v.items, ctx, 0);
 	const spec = {
 		...opt("title", str(v.title, GENUI_LIMITS.maxString)),
@@ -1047,7 +1056,8 @@ function repairSpecEnvelope(v) {
 		items
 	};
 	const declared = Array.isArray(v.items) ? v.items.length : 0;
-	if (declared > items.length) spec.droppedCount = declared - items.length;
+	const dropped = Math.max(ctx.dropped, declared > items.length ? declared - items.length : 0);
+	if (dropped > 0) spec.droppedCount = dropped;
 	return spec;
 }
 /**
