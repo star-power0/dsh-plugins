@@ -196,6 +196,12 @@ const FIELD_ALIASES: Readonly<Record<string, ReadonlyArray<readonly [string, str
   select: [['items', 'options']],
   steps: [['items', 'steps']],
   table: [['headers', 'columns']],
+  // `code` body is `code`, not `value`/`text`; `lang` is not `language`.
+  // A model writing {"type":"code","value":"…","language":"go"} used to lose
+  // the whole node (str(v.code) === undefined → null), leaving an empty card.
+  code: [['value', 'code'], ['text', 'code'], ['content', 'code'], ['language', 'lang']],
+  // Same shape confusion for the other code-body node.
+  mermaid: [['value', 'code'], ['text', 'code'], ['content', 'code']],
 }
 
 /**

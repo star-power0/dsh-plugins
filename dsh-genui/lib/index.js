@@ -253,7 +253,18 @@ const FIELD_ALIASES = {
 	radio: [["items", "options"]],
 	select: [["items", "options"]],
 	steps: [["items", "steps"]],
-	table: [["headers", "columns"]]
+	table: [["headers", "columns"]],
+	code: [
+		["value", "code"],
+		["text", "code"],
+		["content", "code"],
+		["language", "lang"]
+	],
+	mermaid: [
+		["value", "code"],
+		["text", "code"],
+		["content", "code"]
+	]
 };
 /**
 * Normalize one raw node before its repair branch: migrate aliased fields

@@ -92,7 +92,7 @@ function FenceFallback({ raw, fenceKey, allDropped }: { raw: string; fenceKey: K
   // "解析失败" wording would mislead).
   const diagnostic = settled && raw.trim() !== ''
     ? allDropped === true
-      ? '（JSON 本身合法，但所有组件都因字段名错误被丢弃。常见错误：keyvalue 要 pairs、steps 要 steps、table 要 columns+rows、callout 要 content、stat 每项要 label+value）'
+      ? '（JSON 本身合法，但所有组件都因字段名错误被丢弃。常见错误：keyvalue 要 pairs、steps 要 steps、table 要 columns+rows、callout 要 content、code 要 code+lang、stat 每项要 label+value）'
       : describeJsonFailure(raw)
     : null
   return (
@@ -156,7 +156,7 @@ function renderInlineFence(key: Key, context: GenuiFenceContext | undefined, spe
     <ErrorBoundary key={context?.source?.id ?? key} label="该界面">
       {dropped > 0 && (
         <div style={FENCE_WARN_STYLE} role="status">
-          ⚠️ {dropped} 个组件因字段名错误未渲染（其余正常显示）。常见错误：keyvalue 要 `pairs`、steps 要 `steps`、table 要 `columns`+`rows`、callout 要 `content`、stat 每项要 `label`+`value`。
+          ⚠️ {dropped} 个组件因字段名错误未渲染（其余正常显示）。常见错误：keyvalue 要 `pairs`、steps 要 `steps`、table 要 `columns`+`rows`、callout 要 `content`、code 要 `code`+`lang`、stat 每项要 `label`+`value`。
         </div>
       )}
       <GenuiBlock

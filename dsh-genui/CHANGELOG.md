@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.8.15] - 2026-10-19
+### 修复（`code` / `mermaid` 正文写在错误字段名下 → 整个节点被静默丢弃）
+
+- **事故**：一条回答里的 `{"type":"code","value":"…","language":"go"}` 渲染成了
+  只有标题「新旧逻辑对比」的**空卡片**，顶部黄色横幅报「1 个组件因字段名错误未渲染」。
+  根因：`repairNode` 的 `code` 分支只读 `v.code`（`str(v.code) === undefined` → `return null`），
+  `lang` 只读 `v.lang`。写 `value`/`language` 时节点直接丢弃，父卡片只剩空壳。
+  `mermaid` 同样只读 `v.code`，是同一个形状错误。
+- **修复**：`FIELD_ALIASES` 增加两条——
+  `code: [['value','code'],['text','code'],['content','code'],['language','lang']]`、
+  `mermaid: [['value','code'],['text','code'],['content','code']]`。
+  别名仅在规范字段缺失时生效，真实 `code` 永远优先。
+- **横幅文案**：`fence-render.tsx` 两处常见错误提示补上 `code 要 code+lang`，
+  以后同类错误能直接看出该写什么字段。
+- **回归**：新增 `maintenance/test-genui-code-alias.mjs`（6 组断言）——
+  事故原形、`text`/`content` 别名、规范字段优先、`mermaid` 同形状、无正文仍算真丢弃、幂等。
+  连同既有三个 genui 回归全部 PASS；`vitest run` 18/18；`tsc` 0 error；
+  `tsdown` 构建成功（`client.js` 114.70→114.90 KB）。
+
 ## [0.8.14] - 2026-10-18
 ### 修复（节点文本从不渲染 Markdown——表格单元格露出 `**` 和反引号）
 
